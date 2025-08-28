@@ -1,0 +1,26 @@
+# Ignore runtime/user data
+*.log
+*.bak
+*.tmp
+*.temp
+
+# Ignore user/session/config data
+*.cookies.txt
+*_positions.json
+*_stats.json
+*_completed.json
+*_current.json
+save/
+logs/
+backup/
+
+# Ignore IDE/editor/project files
+.vscode/
+*.code-workspace
+
+# Ignore OS and miscellaneous junk
+Thumbs.db
+.DS_Store
+
+# Ignore other junk
+*.workspace
