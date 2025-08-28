@@ -1,2 +1,2 @@
 # Silence-Suzuka-Player
-helo
+helo 🤖
