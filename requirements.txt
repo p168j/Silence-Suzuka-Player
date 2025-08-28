@@ -5,3 +5,6 @@ requests
 sounddevice
 pynput
 numpy
+ruff
+black
+pytest
