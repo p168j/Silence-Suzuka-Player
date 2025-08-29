@@ -683,6 +683,7 @@ class HoverSlider(QSlider):
         super().__init__(orientation, parent)
         self.setMouseTracking(True)
         self._hover_scale = 1.0
+        self._handle_color = QColor(74, 44, 42)  # Default vinyl theme color #4a2c2a
 
         # Animation object
         self._animation = QPropertyAnimation(self, b"hoverScale")
@@ -712,6 +713,15 @@ class HoverSlider(QSlider):
 
     hoverScale = Property(float, getHoverScale, setHoverScale)
 
+    def setHandleColor(self, color):
+        """Set the handle color for the slider."""
+        if isinstance(color, QColor):
+            self._handle_color = color
+        else:
+            # Try to create QColor from string/other formats
+            self._handle_color = QColor(color)
+        self.update()
+
     def paintEvent(self, event):
         # Draw default
         super().paintEvent(event)
@@ -734,9 +744,8 @@ class HoverSlider(QSlider):
             -scale_offset, -scale_offset, scale_offset, scale_offset
         )
 
-        # Match transitions.html (brown thumb)
-        handle_color = QColor(74, 44, 42)  # #4a2c2a
-        painter.setBrush(QBrush(handle_color))
+        # Use the configurable handle color instead of hardcoded brown
+        painter.setBrush(QBrush(self._handle_color))
         painter.setPen(Qt.NoPen)
         painter.drawEllipse(scaled_rect)
 
@@ -862,6 +871,9 @@ class MediaPlayer(QMainWindow):
         self._setup_keyboard_shortcuts()
         if self.theme == 'vinyl':
             self._apply_vinyl_theme()
+        elif self.theme == 'slate':
+            from ui.theme_slate import apply_slate_theme
+            apply_slate_theme(self)
         else:
             self._apply_dark_theme()
         # Apply dynamic font scaling after theme
@@ -2141,6 +2153,9 @@ class MediaPlayer(QMainWindow):
                 bg.setAutoFillBackground(False)
         except Exception:
             pass
+        
+        # Set handle color for HoverSlider
+        self._set_slider_handle_colors(QColor(255, 255, 255))  # #FFFFFF
 
     def _apply_vinyl_theme(self):
         style = """
@@ -2317,11 +2332,39 @@ class MediaPlayer(QMainWindow):
                 self.scope_label.setVisible(False)
         except Exception:
             pass
+        
+        # Set handle color for HoverSlider
+        self._set_slider_handle_colors(QColor(74, 44, 42))  # #4a2c2a
+
+    def _set_slider_handle_colors(self, color):
+        """Set handle colors for progress and volume sliders if setHandleColor method exists."""
+        try:
+            if hasattr(self, 'progress_slider') and hasattr(self.progress_slider, 'setHandleColor'):
+                self.progress_slider.setHandleColor(color)
+        except Exception:
+            pass
+        
+        try:
+            if hasattr(self, 'volume_slider') and hasattr(self.volume_slider, 'setHandleColor'):
+                self.volume_slider.setHandleColor(color)
+        except Exception:
+            pass
 
     def toggle_theme(self):
-        self.theme = 'vinyl' if getattr(self, 'theme', 'dark') != 'vinyl' else 'dark'
+        # Cycle: vinyl → slate → dark → vinyl
+        current = getattr(self, 'theme', 'dark')
+        if current == 'vinyl':
+            self.theme = 'slate'
+        elif current == 'slate':
+            self.theme = 'dark'
+        else:
+            self.theme = 'vinyl'
+            
         if self.theme == 'vinyl':
             self._apply_vinyl_theme()
+        elif self.theme == 'slate':
+            from ui.theme_slate import apply_slate_theme
+            apply_slate_theme(self)
         else:
             self._apply_dark_theme()
         # Apply dynamic font scaling after theme change
@@ -2539,6 +2582,9 @@ class MediaPlayer(QMainWindow):
                 # Apply theme
                 if self.theme == 'vinyl':
                     self._apply_vinyl_theme()
+                elif self.theme == 'slate':
+                    from ui.theme_slate import apply_slate_theme
+                    apply_slate_theme(self)
                 else:
                     self._apply_dark_theme()
                 # Apply dynamic font scaling after theme
