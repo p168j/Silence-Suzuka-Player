@@ -43,5 +43,3 @@ Thumbs.db
 
 # Ignore other junk
 *.workspace
-config.json
-positions.json

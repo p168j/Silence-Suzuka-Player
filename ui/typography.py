@@ -10,7 +10,6 @@ Provides native (non-monkey-patched) typography system with:
 """
 
 import json
-import sys
 from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Any
@@ -173,52 +172,56 @@ class TypographyManager(QObject):
         
     def _build_typography_qss(self) -> str:
         """Build QSS stylesheet for typography"""
-        font_family = self._build_font_family_stack()
-        
-        # Scale base sizes
-        body_size = self._get_scaled_size(self.settings.body_size)
-        list_size = self._get_scaled_size(self.settings.list_size)
-        title_size = self._get_scaled_size(self.settings.title_size)  # used for track label
-        time_size = self._get_scaled_size(self.settings.time_size)
-        chip_size = self._get_scaled_size(self.settings.chip_size)
-        badge_size = self._get_scaled_size(self.settings.badge_size)
+        s = self.settings
+        scale = float(s.scale)
 
-        # Scale row heights so items don't get cramped as font size grows
-        row_height_playlist = max(22, int(32 * self.settings.scale))  # base ~32px
-        row_height_upnext = max(20, int(28 * self.settings.scale))    # base ~28px
-        
+        # Derived pixel sizes
+        body_px  = int(round(s.body_size  * scale))
+        list_px  = int(round(s.list_size  * scale))
+        title_px = int(round(s.title_size * scale))
+        time_px  = int(round(s.time_size  * scale))
+        chip_px  = int(round(s.chip_size  * scale))
+        badge_px = int(round(s.badge_size * scale))
+
+        # Row heights tuned to font size (keeps items comfortable)
+        row_height_playlist = int(round(list_px * 1.6))
+        row_height_upnext   = int(round(list_px * 1.4))
         return f"""
 /* Typography Manager - FAMILY Block */
 QLabel, QAbstractItemView {{
-    font-family: {font_family};
+    font-family: "{s.latin_family}", "{s.cjk_family}", {s.fallback_generic};
 }}
 
 /* Typography Manager - SIZE Block */
 QLabel {{
-    font-size: {body_size}px;
+    font-size: {body_px}px;
 }}
-
-QAbstractItemView {{
-    font-size: {list_size}px;
-}}
-
-/* Specific component sizes */
-/* Keep app title fixed by NOT setting #titleLabel here */
 
 #trackLabel {{
-    font-size: {title_size}px;
+    font-size: {title_px}px;
 }}
 
 #timeLabel, #durLabel, #elapsedLabel, #remainingLabel, #currentTimeLabel, #totalTimeLabel {{
-    font-size: {time_size}px;
+    font-size: {time_px}px;
 }}
 
 #scopeChip {{
-    font-size: {chip_size}px;
+    font-size: {chip_px}px;
 }}
 
 #statsBadge {{
-    font-size: {badge_size}px;
+    font-size: {badge_px}px;
+}}
+
+/* Lists and trees: scale list text and headers */
+QAbstractItemView {{
+    font-size: {list_px}px;
+}}
+#playlistTree, #upNext {{
+    font-size: {list_px}px;
+}}
+QHeaderView::section {{
+    font-size: {list_px}px;
 }}
 
 /* Row heights to match scaled text */

@@ -79,7 +79,7 @@ try:
     QCheckBox, QSpinBox, QDoubleSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QTabWidget, QToolTip, QGraphicsDropShadowEffect, QSpacerItem, QGridLayout
     )
     from PySide6.QtCore import Qt, QTimer, QSize, QThread, Signal, QEvent, QPropertyAnimation, QEasingCurve, Property
-    from PySide6.QtGui import QIcon, QPixmap, QKeySequence, QShortcut, QAction, QPainter, QColor, QPen, QBrush, QFont, QFontDatabase
+    from PySide6.QtGui import QIcon, QPixmap, QKeySequence, QShortcut, QAction, QPainter, QColor, QPen, QBrush, QFont, QFontDatabase, QFontMetrics
     print("✓ PySide6 imported")
     try:
         from PySide6.QtSvg import QSvgRenderer
@@ -200,67 +200,56 @@ class SystemAudioMonitor(QThread):
             print("✗ numpy unavailable, disabling system audio monitoring")
             return
 
+        def _host_name_for(dev_dict):
+            try:
+                idx = dev_dict.get('hostapi')
+                return self._sd.query_hostapis()[idx]['name']
+            except Exception:
+                # some sd builds expose hostapi_name; otherwise empty
+                return dev_dict.get('hostapi_name', '') or ''
+
         while self._is_running:
             try:
-                # Determine device to monitor
-                # Use fixed device if provided; default to 46 as per user environment
-                monitor_device = self.device_id if self.device_id is not None else 46
-                device_type = 'input'
-                
+                # Choose device
+                # None means "use default output (loopback when possible)"
+                monitor_device = self.device_id if (isinstance(self.device_id, int) and self.device_id >= 0) else None
+
                 if self.monitor_system_output and hasattr(self._sd, 'query_devices'):
-                    # Try to find WASAPI loopback device on Windows
                     try:
                         import platform
                         if platform.system() == 'Windows':
                             devices = self._sd.query_devices()
+                            # Prefer explicit WASAPI loopback entries
                             for i, dev in enumerate(devices):
-                                if dev.get('name', '').lower().find('stereo mix') != -1 or \
-                                   dev.get('name', '').lower().find('what u hear') != -1 or \
-                                   (dev.get('hostapi_name', '') == 'Windows WASAPI' and 
-                                    dev.get('max_input_channels', 0) > 0 and 
-                                    'loopback' in dev.get('name', '').lower()):
+                                name = (dev.get('name') or '').lower()
+                                host = _host_name_for(dev)
+                                if ('loopback' in name or 'stereo mix' in name or 'what u hear' in name) and host.startswith('Windows WASAPI'):
                                     monitor_device = i
-                                    print(f"✓ Using WASAPI loopback device: {dev['name']}")
+                                    print(f"✓ Using WASAPI loopback device: [{i}] {dev.get('name')} ({host})")
                                     break
-                            
-                            # If no explicit loopback found, try default output as input (WASAPI feature)
+                            # If none found, fall back to default output and enable loopback
                             if monitor_device is None:
                                 try:
-                                    # On Windows with WASAPI, we can monitor the default output
-                                    default_out = self._sd.query_devices(kind='output')
-                                    if default_out and default_out.get('hostapi_name') == 'Windows WASAPI':
-                                        # Use default input but configure for loopback monitoring
-                                        monitor_device = None  # Use default input
-                                        print("✓ Using default WASAPI device for system audio monitoring")
+                                    di = self._sd.default.device
+                                    if isinstance(di, (list, tuple)) and len(di) >= 2 and di[1] is not None:
+                                        monitor_device = di[1]
+                                        info = self._sd.query_devices(monitor_device, 'output')
+                                        print(f"✓ Using default output for loopback: [{monitor_device}] {info.get('name')} ({_host_name_for(info)})")
                                 except Exception:
                                     pass
                     except Exception as e:
                         print(f"WASAPI loopback detection failed: {e}")
-                
-                # Fallback to specified device or default microphone
-                if monitor_device is None:
-                    monitor_device = self.device_id
-                    if not self.monitor_system_output:
-                        print("✓ Using microphone for audio monitoring")
-                    else:
-                        print("⚠ WASAPI loopback not available, falling back to microphone")
 
-                # Configure device and backend specifics
+                # Configure backend specifics
                 try:
                     import platform as _plat
                 except Exception:
                     _plat = None
+
                 extra_settings = None
                 device_query_kind = 'input'
                 try:
                     if _plat and _plat.system() == 'Windows' and bool(self.monitor_system_output):
-                        # Prefer default output device for WASAPI loopback
-                        try:
-                            di = self._sd.default.device
-                            if isinstance(di, (list, tuple)) and len(di) >= 2 and di[1] is not None:
-                                monitor_device = di[1]
-                        except Exception:
-                            pass
                         # Enable WASAPI loopback if available
                         try:
                             extra_settings = self._sd.WasapiSettings(loopback=True)
@@ -275,30 +264,32 @@ class SystemAudioMonitor(QThread):
                     extra_settings = None
                     device_query_kind = 'input'
 
+                # Query device info
                 try:
-                    device_info = self._sd.query_devices(monitor_device, device_query_kind)
+                    if monitor_device is not None:
+                        device_info = self._sd.query_devices(monitor_device, device_query_kind)
+                    else:
+                        device_info = self._sd.query_devices(kind=device_query_kind)
                 except Exception:
-                    # Fallback to default device of the requested kind
+                    # Fallback to defaults
                     try:
                         device_info = self._sd.query_devices(kind=device_query_kind)
                         monitor_device = None
                     except Exception:
                         device_info = {'default_samplerate': 44100}
                         monitor_device = None
+
                 samplerate = int(device_info.get('default_samplerate', 44100))
                 channels = 2 if extra_settings is not None else 1
 
                 def audio_callback(indata, frames, time_info, status):
                     if status:
                         pass
-                    # Use RMS (Root Mean Square) with light smoothing to reduce flapping
-                    rms = float(np.sqrt(np.mean(indata**2)))
-                    # Exponential moving average
+                    rms = float(np.sqrt(np.mean(indata**2))) if frames > 0 else 0.0
                     try:
                         self._ema_rms = 0.2 * rms + 0.8 * float(getattr(self, '_ema_rms', 0.0))
                     except Exception:
                         self._ema_rms = rms
-                    # Emit live RMS periodically for Settings meter
                     try:
                         now = time.time(); last = float(getattr(self, '_last_rms_emit', 0.0))
                         if (now - last) > 0.1:
@@ -306,41 +297,47 @@ class SystemAudioMonitor(QThread):
                             self.rmsUpdated.emit(float(max(0.0, min(1.0, self._ema_rms))))
                     except Exception:
                         pass
-                    # Hysteresis: use higher resume_threshold to flip from silent->active
-                    rt = None
+
                     try:
                         rt = float(getattr(self, 'resume_threshold', self.threshold * 1.5))
                     except Exception:
                         rt = self.threshold * 1.5
+
                     if self._last_state_is_silent:
                         is_silent = (self._ema_rms < rt)
                     else:
                         is_silent = (self._ema_rms < self.threshold)
-                    
+
                     if is_silent != self._last_state_is_silent:
                         self.audioStateChanged.emit(bool(is_silent))
                         self._last_state_is_silent = is_silent
-                    
+
                     if is_silent:
                         self._silence_counter += len(indata) / samplerate
                     else:
                         self._silence_counter = 0.0
-                    
+
                     if self._silence_counter > self.silence_duration_s:
                         self.silenceDetected.emit()
                         self._silence_counter = 0.0
 
-                with self._sd.InputStream(device=monitor_device, samplerate=samplerate,
-                                          channels=channels, callback=audio_callback, blocksize=1024, extra_settings=extra_settings):
+                with self._sd.InputStream(
+                    device=monitor_device,
+                    samplerate=samplerate,
+                    channels=channels,
+                    callback=audio_callback,
+                    blocksize=1024,
+                    extra_settings=extra_settings
+                ):
                     while self._is_running:
                         if getattr(self, '_restart_requested', False):
                             break
                         self.msleep(100)
+
                 if getattr(self, '_restart_requested', False):
-                    # Clear flag and continue to reopen stream with updated settings
                     self._restart_requested = False
                     continue
-                        
+
             except Exception as e:
                 print(f"SystemAudioMonitor error: {e}")
                 self.audioStateChanged.emit(False)
@@ -867,6 +864,8 @@ class MediaPlayer(QMainWindow):
             self._apply_vinyl_theme()
         else:
             self._apply_dark_theme()
+        # Apply dynamic font scaling after theme
+        self._apply_dynamic_fonts()
         self._init_mpv()
         self._load_files()
         self._init_monitors()
@@ -1214,14 +1213,13 @@ class MediaPlayer(QMainWindow):
         # Set text elide mode for single-line with ellipsis
         self.playlist_tree.setTextElideMode(Qt.ElideRight)
 
-        # Set playlist font: Lora, italic, bold, size 14
-        self.playlist_tree.setFont(self._font_serif(14, italic=True, bold=True))
+        # Set playlist font: Lora, italic, bold (size set dynamically)
+        self.playlist_tree.setFont(self._font_serif_no_size(italic=True, bold=True))
 
         self.playlist_stack.addWidget(self.playlist_tree)
 
          # --- ADD THESE LINES FOR ICON SIZE AND ROW HEIGHT ---
         self.playlist_tree.setIconSize(QSize(28, 28))  # Make icon 28x28 (or adjust as needed)
-        self.playlist_tree.setStyleSheet("#playlistTree::item { min-height: 32px; }")  # Row height for vertical alignment
 
         # 2. The Empty State Widget (Index 1)
         self.empty_state_widget = QWidget()
@@ -1259,7 +1257,7 @@ class MediaPlayer(QMainWindow):
         # Track Title Label
         self.track_label = QLabel("No track playing")
         self.track_label.setObjectName('trackLabel')
-        self.track_label.setFont(self._font_serif(24, italic=True, bold=True))
+        self.track_label.setFont(self._font_serif_no_size(italic=True, bold=True))
         self.track_label.setWordWrap(False)  # Disable word wrap for eliding
         self.track_label.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         self.track_label.setStyleSheet("""
@@ -1303,7 +1301,7 @@ class MediaPlayer(QMainWindow):
             except Exception:
                 pass
             up_layout.addWidget(self.up_next_header)
-            self.up_next = QTreeWidget(); self.up_next.setHeaderHidden(True); self.up_next.setObjectName('upNext'); self.up_next.setFixedHeight(140); self.up_next.setFont(self._font_serif(14, italic=True, bold=True)); self.up_next.setAlternatingRowColors(True); self.up_next.setIndentation(12)
+            self.up_next = QTreeWidget(); self.up_next.setHeaderHidden(True); self.up_next.setObjectName('upNext'); self.up_next.setFixedHeight(140); self.up_next.setFont(self._font_serif_no_size(italic=True, bold=True)); self.up_next.setAlternatingRowColors(True); self.up_next.setIndentation(12)
             self.up_next.setContextMenuPolicy(Qt.CustomContextMenu)
             self.up_next.customContextMenuRequested.connect(self._show_up_next_menu)
             self.up_next.itemDoubleClicked.connect(self._on_up_next_double_clicked)
@@ -1740,97 +1738,205 @@ class MediaPlayer(QMainWindow):
         font.setLetterSpacing(QFont.AbsoluteSpacing, 0.5)
         return font
 
-    def _init_fonts(self):
-        # Default to system fonts similar to the mock
-        self._ui_font = 'Segoe UI'
-        self._serif_font = 'Georgia'
-        self._jp_serif_font = 'Noto Serif JP'  # Initialize Japanese serif fallback
+    def _font_serif_no_size(self, italic=False, bold=False):
+        """Create a serif font with styling but no fixed size (for dynamic scaling)"""
+        font = QFont(self._serif_font)
+        font.setItalic(italic)
+        if bold:
+            font.setWeight(QFont.Bold)
+        font.setStyleStrategy(QFont.PreferAntialias)
+        font.setLetterSpacing(QFont.AbsoluteSpacing, 0.5)
+        return font
+        
+    def center_on_screen(self):
+        screen = self.screen() if hasattr(self, "screen") and self.screen() else QApplication.primaryScreen()
+        if screen:
+            available = screen.availableGeometry()
+            window_size = self.size()
+            x = available.x() + (available.width() - window_size.width()) // 2
+            y = available.y() + (available.height() - window_size.height()) // 2
+            self.move(x, y)    
+
+    def _apply_dynamic_fonts(self):
+        """Apply dynamic font scaling based on application font size.
+
+        Note: We do NOT set explicit point sizes on playlist_tree or up_next so they inherit
+        QSS-driven font-size from TypographyManager (Ctrl hotkeys will scale them).
+        """
         try:
-            fonts_dir = APP_DIR / 'assets' / 'fonts'
-            # print(f"Font loader scanning: {fonts_dir}")
-            added_fams = []
-            if fonts_dir.exists():
-                # Load any TTFs and OTFs present
-                for ext in ['*.ttf', '*.otf']:
-                    for p in fonts_dir.glob(ext):
-                        try:
-                            rid = QFontDatabase.addApplicationFont(str(p))
-                            if rid != -1:
-                                fams_for = QFontDatabase.applicationFontFamilies(rid)
-                                for fam in fams_for:
-                                    added_fams.append(fam)
-                        except Exception:
-                            pass
+            app_font = QApplication.instance().font()
+            base_size = app_font.pointSizeF()
+            if base_size <= 0:
+                base_size = 10.0  # fallback default
 
-                # --- Noto Sans JP font load ---
-                noto_jp_path = fonts_dir / 'NotoSansJP-Regular.otf'
-                if noto_jp_path.exists():
-                    font_id = QFontDatabase.addApplicationFont(str(noto_jp_path))
-                    families = QFontDatabase.applicationFontFamilies(font_id)
-                    if families:
-                        self._jp_font = families[0]  # Usually "Noto Sans JP"
-                    else:
-                        self._jp_font = 'Noto Sans JP'
-                else:
-                    self._jp_font = 'Noto Sans JP'  # fallback to system font if not found
+            # Title font ~1.7x base, keep serif, italic, bold
+            title_size = round(base_size * 1.7)
+            title_font = self._font_serif_no_size(italic=True, bold=True)
+            title_font.setPointSize(title_size)
+            self.track_label.setFont(title_font)
 
-                # --- Noto Serif JP font load ---
-                noto_serif_jp_path = fonts_dir / 'NotoSerifJP-Regular.otf'
-                if noto_serif_jp_path.exists():
-                    font_id = QFontDatabase.addApplicationFont(str(noto_serif_jp_path))
-                    families = QFontDatabase.applicationFontFamilies(font_id)
-                    if families:
-                        self._jp_serif_font = families[0]  # Usually "Noto Serif JP"
-                    else:
-                        self._jp_serif_font = 'Noto Serif JP'
-                else:
-                    self._jp_serif_font = 'Noto Serif JP'  # fallback to system font if not found
-
-                # Set application-wide fallback font (Inter, Noto Sans JP, Segoe UI, sans-serif)
-                app_font = QFont(f"{self._ui_font}, {self._jp_font}, Segoe UI, sans-serif", 14)
-                QApplication.instance().setFont(app_font)
-
-            if added_fams:
-                fams = set(QFontDatabase.families())
-            # Helper to pick a family by base name, favoring Regular weights and shorter names
-            def _pick_family(base: str):
-                # exact first
-                if base in fams:
-                    return base
-                # prefer newly added families first
-                cands = [f for f in added_fams if base.lower() in f.lower()]
-                if not cands:
-                    cands = [f for f in fams if base.lower() in f.lower()]
-                if cands:
-                    cands.sort(key=lambda s: (('regular' not in s.lower()), len(s)))
-                    return cands[0]
-                return None
-            inter = _pick_family('Inter')
-            lora = _pick_family('Lora')
-            # If not found, bootstrap a verified set of fonts and retry
-            if (not inter) or (not lora):
-                try:
-                    self._bootstrap_fonts()
-                except Exception:
-                    pass
-                fams = set(QFontDatabase.families())
-                inter = _pick_family('Inter')
-                lora = _pick_family('Lora')
-            if inter:
-                self._ui_font = inter
-            if lora:
-                self._serif_font = lora
-
-            # Set up font substitutions for Japanese text
+            # Ensure list widgets keep serif/bold/italic but NO explicit size
             try:
-                QFont.insertSubstitution(self._serif_font, self._jp_serif_font)
-                QFont.insertSubstitution(self._ui_font, self._jp_font)
-                # print(f"Font substitutions: {self._serif_font} -> {self._jp_serif_font}, {self._ui_font} -> {self._jp_font}")
+                self.playlist_tree.setFont(self._font_serif_no_size(italic=True, bold=True))
+            except Exception:
+                pass
+            try:
+                if hasattr(self, 'up_next'):
+                    self.up_next.setFont(self._font_serif_no_size(italic=True, bold=True))
             except Exception:
                 pass
 
-            # print(f"Using UI font: {self._ui_font}, Serif font: {self._serif_font}")
-            # No need to set QApplication font again here; already set above!
+            # Update eliding after font change
+            self._update_track_label_elide()
+
+        except Exception as e:
+            print(f"Dynamic font scaling failed: {e}")
+            # Best-effort to keep the title readable even if we failed above
+            try:
+                self._update_track_label_elide()
+            except Exception:
+                pass
+
+            # Update eliding after font change
+            self._update_track_label_elide()
+        except Exception as e:
+            print(f"Dynamic font scaling failed: {e}")
+
+            # Update eliding after font change
+            self._update_track_label_elide()
+        except Exception as e:
+            print(f"Dynamic font scaling failed: {e}")
+
+    def _get_scaled_serif_font(self, italic=False, bold=False):
+        """Get a dynamically scaled serif font for playlist items"""
+        try:
+            app_font = QApplication.instance().font()
+            base_size = app_font.pointSizeF()
+            if base_size <= 0:
+                base_size = 10.0  # fallback default
+            
+            list_size = round(base_size * 1.1)
+            font = self._font_serif_no_size(italic=italic, bold=bold)
+            font.setPointSize(list_size)
+            return font
+        except Exception:
+            # Fallback to old method
+            return self._font_serif(14, italic=italic, bold=bold)
+
+    def _init_fonts(self):
+        # Set proper defaults as specified in requirements
+        self._ui_font = 'Segoe UI'
+        self._serif_font = 'Georgia'
+        self._jp_font = 'Noto Sans JP'
+        self._jp_serif_font = 'Noto Serif JP'
+        
+        try:
+            fonts_dir = APP_DIR / 'assets' / 'fonts'
+            added_families = []
+            
+            # Load any fonts present under APP_DIR/assets/fonts (ttf/otf) and collect families
+            if fonts_dir.exists():
+                for ext in ['*.ttf', '*.otf']:
+                    for font_path in fonts_dir.glob(ext):
+                        try:
+                            font_id = QFontDatabase.addApplicationFont(str(font_path))
+                            if font_id != -1:
+                                families = QFontDatabase.applicationFontFamilies(font_id)
+                                added_families.extend(families)
+                        except Exception:
+                            pass
+            
+            # Get all available font families
+            all_families = set(QFontDatabase.families())
+            
+            # Helper to pick families, favoring newly-added and "Regular" weights
+            def _pick_family(base_name: str):
+                # First try exact match
+                if base_name in all_families:
+                    return base_name
+                
+                # Look for families containing the base name
+                candidates = []
+                
+                # Prefer newly added families first
+                for family in added_families:
+                    if base_name.lower() in family.lower():
+                        candidates.append(family)
+                
+                # If not found in added families, search all families
+                if not candidates:
+                    for family in all_families:
+                        if base_name.lower() in family.lower():
+                            candidates.append(family)
+                
+                if candidates:
+                    # Sort by preference: Regular weights first, then shorter names
+                    candidates.sort(key=lambda s: (
+                        'regular' not in s.lower(),  # Regular weights first
+                        len(s)  # Shorter names preferred
+                    ))
+                    return candidates[0]
+                
+                return None
+            
+            # Ensure Japanese fonts are registered explicitly if present
+            # Try to load Noto Sans JP
+            noto_sans_jp = _pick_family('Noto Sans JP')
+            if noto_sans_jp:
+                self._jp_font = noto_sans_jp
+            
+            # Try to load Noto Serif JP
+            noto_serif_jp = _pick_family('Noto Serif JP')
+            if noto_serif_jp:
+                self._jp_serif_font = noto_serif_jp
+            
+            # Ensure Lora is selected for serif font even if Inter is unavailable
+            lora_font = _pick_family('Lora')
+            
+            # If Lora not found, call _bootstrap_fonts() and retry once
+            if not lora_font:
+                try:
+                    self._bootstrap_fonts()
+                    # Reload families after bootstrap
+                    added_families = []
+                    if fonts_dir.exists():
+                        for ext in ['*.ttf', '*.otf']:
+                            for font_path in fonts_dir.glob(ext):
+                                try:
+                                    font_id = QFontDatabase.addApplicationFont(str(font_path))
+                                    if font_id != -1:
+                                        families = QFontDatabase.applicationFontFamilies(font_id)
+                                        added_families.extend(families)
+                                except Exception:
+                                    pass
+                    all_families = set(QFontDatabase.families())
+                    lora_font = _pick_family('Lora')
+                except Exception:
+                    pass
+            
+            # Set Lora for serif if found
+            if lora_font:
+                self._serif_font = lora_font
+            
+            # Pick Inter if present for UI font; otherwise leave Segoe UI
+            inter_font = _pick_family('Inter')
+            if inter_font:
+                self._ui_font = inter_font
+            
+            # Set QFont substitutions so JP glyphs fall back correctly
+            try:
+                QFont.insertSubstitution(self._serif_font, self._jp_serif_font)
+                QFont.insertSubstitution(self._ui_font, self._jp_font)
+            except Exception:
+                pass
+            
+            # Set QApplication font to UI font at size 14
+            try:
+                app_font = QFont(self._ui_font, 14)
+                QApplication.instance().setFont(app_font)
+            except Exception:
+                pass
+                
         except Exception:
             pass
 
@@ -1841,14 +1947,22 @@ class MediaPlayer(QMainWindow):
                 return
             fonts_dir = APP_DIR / 'assets' / 'fonts'
             fonts_dir.mkdir(parents=True, exist_ok=True)
-            targets = [
-                ("Inter-VariableFont_slnt,wght.ttf", "https://github.com/google/fonts/raw/main/ofl/inter/Inter-VariableFont_slnt,wght.ttf"),
-                ("Lora-VariableFont_wght.ttf", "https://github.com/google/fonts/raw/main/ofl/lora/Lora-VariableFont_wght.ttf"),
-                ("Lora-Italic-VariableFont_wght.ttf", "https://github.com/google/fonts/raw/main/ofl/lora/Lora-Italic-VariableFont_wght.ttf"),
-                ("NotoSerifJP-Regular.otf", "https://github.com/google/fonts/raw/main/ofl/notoserifjp/static/NotoSerifJP-Regular.otf"),
-                ("NotoSansJP-Regular.otf", "https://github.com/google/fonts/raw/main/ofl/notosansjp/static/NotoSansJP-Regular.otf"),
+            
+            # Required fonts for serif typography
+            required_targets = [
+                ("Lora[wght].ttf", "https://github.com/google/fonts/raw/main/ofl/lora/Lora[wght].ttf"),
+                ("Lora-Italic[wght].ttf", "https://github.com/google/fonts/raw/main/ofl/lora/Lora-Italic[wght].ttf"),
+                ("NotoSerifJP[wght].ttf", "https://github.com/google/fonts/raw/main/ofl/notoserifjp/NotoSerifJP[wght].ttf"),
+                ("NotoSansJP[wght].ttf", "https://github.com/google/fonts/raw/main/ofl/notosansjp/NotoSansJP[wght].ttf"),
             ]
-            for fname, url in targets:
+            
+            # Optional fonts for UI
+            optional_targets = [
+                ("Inter[opsz,wght].ttf", "https://github.com/google/fonts/raw/main/ofl/inter/Inter[opsz,wght].ttf"),
+            ]
+            
+            # Download required fonts first
+            for fname, url in required_targets:
                 path = fonts_dir / fname
                 if not path.exists():
                     print(f"Downloading font: {fname} ...")
@@ -1861,6 +1975,25 @@ class MediaPlayer(QMainWindow):
                         print(f"✓ Installed {fname}: {list(fams_for) or 'n/a'}")
                     else:
                         print(f"✗ Failed to download {fname}: HTTP {r.status_code}")
+            
+            # Download optional fonts (failures are not critical)
+            for fname, url in optional_targets:
+                path = fonts_dir / fname
+                if not path.exists():
+                    print(f"Downloading optional font: {fname} ...")
+                    try:
+                        r = requests.get(url, timeout=20)
+                        if r.status_code == 200 and r.content:
+                            with open(path, 'wb') as f:
+                                f.write(r.content)
+                            rid = QFontDatabase.addApplicationFont(str(path))
+                            fams_for = QFontDatabase.applicationFontFamilies(rid) if rid != -1 else []
+                            print(f"✓ Installed optional {fname}: {list(fams_for) or 'n/a'}")
+                        else:
+                            print(f"⚠ Optional font {fname} not available: HTTP {r.status_code}")
+                    except Exception as e:
+                        print(f"⚠ Optional font {fname} download failed: {e}")
+                        
         except Exception as e:
             print(f"Font bootstrap error: {e}")
 
@@ -1929,11 +2062,11 @@ class MediaPlayer(QMainWindow):
         #miniBtn:hover { color: #FFFFFF; }
         #miniBtn:pressed { color: #888888; }
         #playlistTree { background-color: transparent; border: none; color: #B3B3B3; font-family: '{self._serif_font}'; alternate-background-color: #181818; }
-        #playlistTree::item { min-height: 24px; height: 24px; padding: 3px 8px; font-size: 13px; }
+        #playlistTree::item { min-height: 24px; height: 24px; padding: 3px 8px; }
         #playlistTree::item:hover { background-color: #282828; }
         #playlistTree::item:selected { background-color: #282828; color: #1DB954; }
         #videoWidget { background-color: #000000; border-radius: 8px; border: 1px solid #202020; }
-        #trackLabel { color: #FFFFFF; font-size: 16px; font-weight: bold; font-family: '{self._serif_font}'; font-style: italic; }
+        #trackLabel { color: #FFFFFF; font-weight: bold; font-family: '{self._serif_font}'; font-style: italic; }
         #controlBtn { background: transparent; color: #B3B3B3; font-size: 20px; border: none; border-radius: 20px; width: 40px; height: 40px; padding: 0px; }
         #controlBtn:hover { background-color: #282828; }
         #controlBtn:pressed { background-color: #202020; padding-top: 1px; padding-left: 1px; }
@@ -1949,7 +2082,7 @@ class MediaPlayer(QMainWindow):
         QSlider::sub-page:horizontal { background-color: #1DB954; border-radius: 2px; }
         QSlider::add-page:horizontal { background-color: #535353; border-radius: 2px; }
         #silenceIndicator { color: #FF0000; font-size: 18px; margin: 0 8px; padding-bottom: 3px; }
-        #upNext::item { min-height: 24px; height: 24px; padding: 3px 8px; font-size: 13px; }
+        #upNext::item { min-height: 24px; height: 24px; padding: 3px 8px; }
         #upNext::item:hover { background-color: #282828; }
         #upNext::item:selected { background-color: #282828; color: #1DB954; }
         #upNextHeader { background-color: #1a1a1a; color: #B3B3B3; border: 1px solid #2e2e2e; border-radius: 6px; padding: 4px 8px; text-align:left; }
@@ -2047,7 +2180,6 @@ class MediaPlayer(QMainWindow):
             min-height: 28px;
             height: 28px;
             padding: 5px 12px;
-            font-size: 14px;
             color: #3b2d1a;    /* deeper brown for better contrast */
             border-bottom: 1px solid #e5d5b8; /* subtle divider */
         }
@@ -2060,7 +2192,7 @@ class MediaPlayer(QMainWindow):
         #playlistTree::item:hover { background-color: rgba(239, 227, 200, 0.7); }
         #playlistTree::item:selected { background-color: #e76f51; color: #f3ead3; }
         #videoWidget { background-color: #000; border-radius: 8px; border: 10px solid #faf3e0; }
-        #trackLabel { color: #4a2c2a; font-size: 16px; font-weight: bold; font-style: italic; font-family: '{self._serif_font}'; }
+        #trackLabel { color: #4a2c2a; font-weight: bold; font-style: italic; font-family: '{self._serif_font}'; }
         #playPauseBtn { background-color: #e76f51; color: #f3ead3; font-size: 26px; border: none; border-radius: 30px; width: 60px; height: 60px; padding: 0px; }
         #playPauseBtn:hover {
         background-color: #d86a4a;
@@ -2080,7 +2212,7 @@ class MediaPlayer(QMainWindow):
         QSlider::sub-page:horizontal { background-color: #e76f51; border-radius: 3px; }
         #timeLabel, #durLabel { font-family: '{self._ui_font}'; font-size: 13px; color: #654321; }
         #silenceIndicator { color: #b00000; font-size: 18px; margin: 0 8px; padding-bottom: 3px; }
-        #upNext::item { min-height: 24px; height: 24px; padding: 3px 8px; font-size: 13px; }
+        #upNext::item { min-height: 24px; height: 24px; padding: 3px 8px; }
         #upNext::item:hover { background-color: rgba(239, 227, 200, 0.7); }
         #upNext::item:selected { background-color: #e76f51; color: #f3ead3; }
         #upNextHeader { background-color: rgba(250,243,224,0.9); color: #4a2c2a; border: 1px solid #c2a882; border-radius: 6px; padding: 4px 8px; text-align:left; }
@@ -2192,6 +2324,8 @@ class MediaPlayer(QMainWindow):
             self._apply_vinyl_theme()
         else:
             self._apply_dark_theme()
+        # Apply dynamic font scaling after theme change
+        self._apply_dynamic_fonts()
         try:
             if hasattr(self, 'theme_btn') and self.theme_btn:
                 self.theme_btn.setToolTip(f"Toggle Theme ({self.theme.capitalize()})")
@@ -2265,12 +2399,19 @@ class MediaPlayer(QMainWindow):
     # Monitors
     def _init_monitors(self):
         # System-wide silence detection
+        try:
+            dev_id = getattr(self, 'monitor_device_id', None)
+            if not isinstance(dev_id, int) or dev_id < 0:
+                dev_id = None
+        except Exception:
+            dev_id = None
+
         self.audio_monitor = SystemAudioMonitor(
             silence_duration_s=self.silence_duration_s,
             silence_threshold=self.silence_threshold,
             resume_threshold=getattr(self, 'resume_threshold', self.silence_threshold * 1.5),
             monitor_system_output=self.monitor_system_output,
-            device_id=self.monitor_device_id
+            device_id=dev_id
         )
         self.audio_monitor.silenceDetected.connect(self.on_silence_detected)
         self.audio_monitor.audioStateChanged.connect(self._update_silence_indicator)
@@ -2361,6 +2502,7 @@ class MediaPlayer(QMainWindow):
         if CFG_SETTINGS.exists():
             try:
                 s = json.load(open(CFG_SETTINGS, 'r', encoding='utf-8'))
+                self.center_on_restore = bool(s.get('center_on_restore', True))
                 self.auto_play_enabled = bool(s.get('auto_play_enabled', self.auto_play_enabled))
                 self.afk_timeout_minutes = int(s.get('afk_timeout_minutes', self.afk_timeout_minutes))
                 self.silence_duration_s = float(s.get('silence_duration_s', self.silence_duration_s))
@@ -2399,6 +2541,8 @@ class MediaPlayer(QMainWindow):
                     self._apply_vinyl_theme()
                 else:
                     self._apply_dark_theme()
+                # Apply dynamic font scaling after theme
+                self._apply_dynamic_fonts()
                 # Restore window state
                 try:
                     win = s.get('window') or {}
@@ -2504,6 +2648,7 @@ class MediaPlayer(QMainWindow):
             'scope_kind': (getattr(self, 'play_scope', None)[0] if isinstance(getattr(self, 'play_scope', None), tuple) else None),
             'scope_key': (getattr(self, 'play_scope', None)[1] if isinstance(getattr(self, 'play_scope', None), tuple) else None),
             'log_level': getattr(self, 'log_level', 'INFO'),
+            'center_on_restore': bool(getattr(self, 'center_on_restore', True)),
             'window': {
                 'x': int(self.geometry().x()),
                 'y': int(self.geometry().y()),
@@ -2566,7 +2711,8 @@ class MediaPlayer(QMainWindow):
                 arr = g.get('items') or []
                 gnode = QTreeWidgetItem(root, [f"📃 {ptitle} ({len(arr)})"])
                 try:
-                    gnode.setFont(0, self._font_serif(14, italic=True, bold=True))
+                    # Bold/italic, no explicit size so it inherits QSS font-size
+                    gnode.setFont(0, self._font_serif_no_size(italic=True, bold=True))
                 except Exception:
                     pass
                 norm_key = key if key else (g.get('title') or ptitle)
@@ -2580,11 +2726,11 @@ class MediaPlayer(QMainWindow):
                     icon = playlist_icon_for_type(it.get('type'))
                     node = QTreeWidgetItem([it.get('title', 'Unknown')])
                     if isinstance(icon, QIcon):
-                        node.setIcon(0, icon)  # Show the SVG icon (YouTube)
+                        node.setIcon(0, icon)
                     else:
-                        node.setText(0, f"{icon} {it.get('title', 'Unknown')}")  # Show emoji for other types
+                        node.setText(0, f"{icon} {it.get('title', 'Unknown')}")
                     try:
-                        node.setFont(0, self._font_serif(14, italic=True, bold=True))
+                        node.setFont(0, self._font_serif_no_size(italic=True, bold=True))
                     except Exception:
                         pass
                     node.setData(0, Qt.UserRole, ('current', idx, it))
@@ -2594,11 +2740,11 @@ class MediaPlayer(QMainWindow):
                     icon = playlist_icon_for_type(it.get('type'))
                     node = QTreeWidgetItem([it.get('title', 'Unknown')])
                     if isinstance(icon, QIcon):
-                        node.setIcon(0, icon)  # Show the SVG icon (YouTube)
+                        node.setIcon(0, icon)
                     else:
-                        node.setText(0, f"{icon} {it.get('title', 'Unknown')}")  # Show emoji for other types
+                        node.setText(0, f"{icon} {it.get('title', 'Unknown')}")
                     try:
-                        node.setFont(0, self._font_serif(14, italic=True, bold=True))
+                        node.setFont(0, self._font_serif_no_size(italic=True, bold=True))
                     except Exception:
                         pass
                     node.setData(0, Qt.UserRole, ('current', idx, it))
@@ -2610,11 +2756,11 @@ class MediaPlayer(QMainWindow):
                     icon = playlist_icon_for_type(it.get('type'))
                     node = QTreeWidgetItem([it.get('title', 'Unknown')])
                     if isinstance(icon, QIcon):
-                        node.setIcon(0, icon)  # Show the SVG icon (YouTube)
+                        node.setIcon(0, icon)
                     else:
-                        node.setText(0, f"{icon} {it.get('title', 'Unknown')}")  # Show emoji for other types
+                        node.setText(0, f"{icon} {it.get('title', 'Unknown')}")
                     try:
-                        node.setFont(0, self._font_serif(14, italic=True, bold=True))
+                        node.setFont(0, self._font_serif_no_size(italic=True, bold=True))
                     except Exception:
                         pass
                     node.setData(0, Qt.UserRole, ('current', idx, it))
@@ -2623,14 +2769,16 @@ class MediaPlayer(QMainWindow):
                 groups = {'youtube': [], 'bilibili': [], 'local': []}
                 for idx, it in enumerate(self.playlist):
                     t = it.get('type', 'local')
-                    if t not in groups: t = 'local'
+                    if t not in groups:
+                        t = 'local'
                     groups[t].append((idx, it))
                 names = {'youtube': '🎬 YouTube', 'bilibili': '📺 Bilibili', 'local': '📁 Local'}
                 for g, arr in groups.items():
-                    if not arr: continue
+                    if not arr:
+                        continue
                     gnode = QTreeWidgetItem(root, [f"{names[g]} ({len(arr)})"])
                     try:
-                        gnode.setFont(0, self._font_serif(14, italic=True, bold=True))
+                        gnode.setFont(0, self._font_serif_no_size(italic=True, bold=True))
                     except Exception:
                         pass
                     gnode.setData(0, Qt.UserRole, ('group', g))
@@ -2642,19 +2790,19 @@ class MediaPlayer(QMainWindow):
                         icon = playlist_icon_for_type(it.get('type'))
                         node = QTreeWidgetItem([it.get('title', 'Unknown')])
                         if isinstance(icon, QIcon):
-                            node.setIcon(0, icon)  # Show the SVG icon (YouTube)
+                            node.setIcon(0, icon)
                         else:
-                            node.setText(0, f"{icon} {it.get('title', 'Unknown')}")  # Show emoji for other types
+                            node.setText(0, f"{icon} {it.get('title', 'Unknown')}")
                         try:
-                            node.setFont(0, self._font_serif(14, italic=True, bold=True))
+                            node.setFont(0, self._font_serif_no_size(italic=True, bold=True))
                         except Exception:
                             pass
                         node.setData(0, Qt.UserRole, ('current', idx, it))
                         gnode.addChild(node)
         if not self.playlist:
-            self.playlist_stack.setCurrentIndex(1)  # Show empty state
+            self.playlist_stack.setCurrentIndex(1)
         else:
-            self.playlist_stack.setCurrentIndex(0)  # Show playlist  
+            self.playlist_stack.setCurrentIndex(0)
 
     def _display_text(self, item):
         icon = "🔴" if item.get('type') == 'youtube' else "🐟" if item.get('type') == 'bilibili' else "🎬"
@@ -4284,6 +4432,9 @@ class MediaPlayer(QMainWindow):
         f_ui.addRow("Show Up Next:", chk_show_up_next)
         f_ui.addRow("Start collapsed:", chk_start_collapsed)
         f_ui.addRow("Show thumbnails:", chk_thumbs)
+        chk_center_on_restore = QCheckBox("Center window on restore")
+        chk_center_on_restore.setChecked(bool(getattr(self, 'center_on_restore', True)))
+        f_ui.addRow("Window restore:", chk_center_on_restore)
         tabs.addTab(w_ui, "UI")
         
         # Diagnostics tab
@@ -4385,6 +4536,10 @@ class MediaPlayer(QMainWindow):
                 self._apply_filters_to_tree()
             except Exception:
                 pass
+            try:
+                self.center_on_restore = bool(chk_center_on_restore.isChecked())
+            except Exception:
+                pass    
 
             
             # Inactivity
@@ -4654,19 +4809,22 @@ class MediaPlayer(QMainWindow):
     def _restart_audio_monitor(self):
         """Restart the audio monitor with new settings"""
         if hasattr(self, 'audio_monitor') and self.audio_monitor:
-            # Stop current monitor
             self.audio_monitor.stop()
-            self.audio_monitor.wait(2000)  # Wait up to 2 seconds
-            
-            # Create new monitor with current settings
-            monitor_system = getattr(self.audio_monitor, 'monitor_system_output', True)
-            threshold = getattr(self.audio_monitor, 'threshold', 0.03)
-            
+            self.audio_monitor.wait(2000)
+
+            try:
+                dev_id = getattr(self, 'monitor_device_id', None)
+                if not isinstance(dev_id, int) or dev_id < 0:
+                    dev_id = None
+            except Exception:
+                dev_id = None
+
             self.audio_monitor = SystemAudioMonitor(
                 silence_duration_s=self.silence_duration_s,
-                silence_threshold=threshold,
-                monitor_system_output=monitor_system,
-                device_id=self.monitor_device_id
+                silence_threshold=float(getattr(self, 'silence_threshold', 0.03)),
+                resume_threshold=float(getattr(self, 'resume_threshold', max(0.03, getattr(self, 'silence_threshold', 0.03) * 1.5))),
+                monitor_system_output=bool(getattr(self, 'monitor_system_output', True)),
+                device_id=dev_id
             )
             self.audio_monitor.silenceDetected.connect(self.on_silence_detected)
             self.audio_monitor.audioStateChanged.connect(self._update_silence_indicator)
@@ -4863,19 +5021,43 @@ class MediaPlayer(QMainWindow):
                 pass
             self.session_start_time = None
 
-    def _update_listening_stats(self):
-        if not self._is_playing() or not self.session_start_time:
+    def _update_listening_stats(self, force: bool = False):
+        """
+        Add elapsed listening time to stats.
+        - When force is False: only update while actively playing (periodic commit).
+        - When force is True: commit whatever has accumulated since session_start_time
+          even if playback is currently paused/stopped (e.g., on pause).
+        """
+        if not self.session_start_time:
             return
+
+        if (not force) and (not self._is_playing()):
+            return
+
         duration = time.time() - self.session_start_time
+        if duration <= 0:
+            return
+
         today = datetime.now().strftime('%Y-%m-%d')
         self.listening_stats.setdefault('daily', {})
         self.listening_stats['daily'][today] = self.listening_stats['daily'].get(today, 0) + duration
         self.listening_stats['overall'] = self.listening_stats.get('overall', 0) + duration
-        self.session_start_time = time.time()
+
+        # Reset or roll session_start_time depending on context
+        if force:
+            self.session_start_time = None
+        else:
+            self.session_start_time = time.time()
+
         try:
             json.dump(self.listening_stats, open(CFG_STATS, 'w', encoding='utf-8'))
         except Exception:
             pass
+
+    def _end_session(self):
+        # Commit any in-progress session even if we just paused (force=True)
+        if self.session_start_time:
+            self._update_listening_stats(force=True)
 
     def update_badge(self):
         today = datetime.now().strftime('%Y-%m-%d')
@@ -5010,7 +5192,15 @@ class MediaPlayer(QMainWindow):
     def changeEvent(self, event):
         if event.type() == QEvent.WindowStateChange:
             if self.windowState() & Qt.WindowMinimized:
-                QTimer.singleShot(100, self.hide); return
+                QTimer.singleShot(100, self.hide)
+                return
+            else:
+                # Restored from minimized
+                # Only center if not maximized
+                if getattr(self, 'center_on_restore', True) and not (self.windowState() & Qt.WindowMaximized):
+                    QTimer.singleShot(100, self.center_on_screen)
+        elif event.type() == QEvent.ApplicationFontChange:
+            self._apply_dynamic_fonts()
         super().changeEvent(event)
 
     def closeEvent(self, event):
