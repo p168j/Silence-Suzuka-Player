@@ -76,7 +76,7 @@ try:
     QPushButton, QLabel, QSlider, QFileDialog, QMessageBox, QLineEdit,
     QTreeWidget, QTreeWidgetItem, QAbstractItemView, QStatusBar, QMenu,
     QSystemTrayIcon, QStyle, QDialog, QFormLayout, QDialogButtonBox, QComboBox,
-    QCheckBox, QSpinBox, QDoubleSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QTabWidget, QToolTip, QGraphicsDropShadowEffect, QSpacerItem, QGridLayout
+    QCheckBox, QSpinBox, QDoubleSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QTabWidget, QToolTip, QGraphicsDropShadowEffect
     )
     from PySide6.QtCore import Qt, QTimer, QSize, QThread, Signal, QEvent, QPropertyAnimation, QEasingCurve, Property
     from PySide6.QtGui import QIcon, QPixmap, QKeySequence, QShortcut, QAction, QPainter, QColor, QPen, QBrush, QFont, QFontDatabase
@@ -1253,11 +1253,14 @@ class MediaPlayer(QMainWindow):
         self.video_frame = QWidget(); self.video_frame.setObjectName('videoWidget')
         self.video_frame.setStyleSheet("background:#000; border-radius: 6px"); main_col.addWidget(self.video_frame, 1)
 
-        # Now Playing and Progress Bar Layout
-        now_playing_layout = QVBoxLayout()
-
-        # Track Title Label
-        track_font = QFont(self._serif_font, 24, QFont.Bold) # Revert to 24 for balance
+        # Now Playing
+        # Now Playing
+        now = QVBoxLayout()
+        self.thumbnail_label = QLabel(); self.thumbnail_label.setFixedSize(160, 90)
+        self.thumbnail_label.setStyleSheet("background-color:#000;border:1px solid #282828"); self.thumbnail_label.setAlignment(Qt.AlignCenter); self.thumbnail_label.hide()
+        now.addWidget(self.thumbnail_label)
+        # Use Lora, bold, italic, size 24 for track label
+        track_font = QFont(self._serif_font, 24, QFont.Bold)
         track_font.setItalic(True)
         track_font.setStyleStrategy(QFont.PreferAntialias)
         self.track_label = QLabel("No track playing")
@@ -1271,28 +1274,38 @@ class MediaPlayer(QMainWindow):
             margin-top: 14px;
             margin-bottom: 12px;
             letter-spacing: 0.5px;
+            font-size: 24px;
         """)
-        now_playing_layout.addWidget(self.track_label)
 
-        # Progress Bar and Time Labels
-        progress_layout = QHBoxLayout()
+        # Now Playing
+        now = QVBoxLayout()
+        self.thumbnail_label = QLabel(); self.thumbnail_label.setFixedSize(160, 90)
+        self.thumbnail_label.setStyleSheet("background-color:#000;border:1px solid #282828"); self.thumbnail_label.setAlignment(Qt.AlignCenter); self.thumbnail_label.hide()
+        now.addWidget(self.thumbnail_label)
+
+        track_font = QFont(self._serif_font, 24, QFont.Bold)
+        track_font.setItalic(True)
+        track_font.setStyleStrategy(QFont.PreferAntialias)
+        self.track_label = QLabel("No track playing")
+        self.track_label.setObjectName('trackLabel')
+        self.track_label.setFont(track_font)
+        self.track_label.setWordWrap(True)
+        self.track_label.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
+        self.track_label.setStyleSheet("""
+            color: #4a2c2a;
+            background: transparent;
+            margin-top: 14px;
+            margin-bottom: 12px;
+            letter-spacing: 0.5px;
+            font-size: 24px;
+        """)
+        now.addWidget(self.track_label)  # <-- THIS LINE ADDS THE TRACK TITLE TO THE LAYOUT!
+
+        prog = QHBoxLayout()
         self.time_label = QLabel("0:00")
-        self.time_label.setObjectName('timeLabel')
-        self.time_label.setFont(QFont(self._ui_font))
-        self.progress = HoverSlider(Qt.Horizontal)
-        self.progress.sliderPressed.connect(lambda: setattr(self, '_user_scrubbing', True))
-        self.progress.sliderReleased.connect(self._on_slider_released)
-        self.progress.sliderMoved.connect(self._on_slider_moved)
-        self.dur_label = QLabel("0:00")
-        self.dur_label.setObjectName('durLabel')
-        self.dur_label.setFont(QFont(self._ui_font))
-        
-        progress_layout.addWidget(self.time_label)
-        progress_layout.addWidget(self.progress, 1)
-        progress_layout.addWidget(self.dur_label)
-        now_playing_layout.addLayout(progress_layout)
 
-        main_col.addLayout(now_playing_layout)
+        prog = QHBoxLayout(); self.time_label = QLabel("0:00"); self.time_label.setObjectName('timeLabel'); self.time_label.setFont(QFont(self._ui_font)); self.progress = HoverSlider(Qt.Horizontal); self.progress.sliderPressed.connect(lambda: setattr(self, '_user_scrubbing', True)); self.progress.sliderReleased.connect(self._on_slider_released); self.progress.sliderMoved.connect(self._on_slider_moved); self.dur_label = QLabel("0:00"); self.dur_label.setObjectName('durLabel'); self.dur_label.setFont(QFont(self._ui_font))
+        prog.addWidget(self.time_label); prog.addWidget(self.progress, 1); prog.addWidget(self.dur_label); now.addLayout(prog); main_col.addLayout(now)
         # Up Next panel (toggle via Settings)
         try:
             self.up_next_container = QWidget(); up_layout = QVBoxLayout(self.up_next_container); up_layout.setContentsMargins(0,0,0,0)
@@ -1486,38 +1499,37 @@ class MediaPlayer(QMainWindow):
             controls_bar.addWidget(QLabel("🔊"))
         # --- end volume icon block ---
         self.volume_slider = HoverSlider(Qt.Horizontal); self.volume_slider.setObjectName('volumeSlider'); self.volume_slider.setRange(0, 100); self.volume_slider.setValue(80); self.volume_slider.setFixedWidth(120); self.volume_slider.valueChanged.connect(self.set_volume)
-        # --- Corrected Centered Control Bar Layout ---
-        controls_row = QGridLayout()
-        controls_row.setContentsMargins(0, 0, 0, 0)
+        from PySide6.QtWidgets import QSizePolicy
 
-        # 1. Define the center button group
+        # --- Centered playback controls, right-aligned volume ---
         center_controls = QHBoxLayout()
         center_controls.setSpacing(12)
+        center_controls.setContentsMargins(0, 0, 0, 0)
+        center_controls.addStretch()
         center_controls.addWidget(self.shuffle_btn)
         center_controls.addWidget(prev_btn)
         center_controls.addWidget(self.play_pause_btn)
         center_controls.addWidget(next_btn)
         center_controls.addWidget(self.repeat_btn)
+        center_controls.addStretch()
         center_widget = QWidget()
         center_widget.setLayout(center_controls)
+        center_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)  # <-- ensures it expands
 
-        # 2. Define the volume control group
         volume_controls = QHBoxLayout()
         volume_controls.setSpacing(6)
+        volume_controls.setContentsMargins(0, 0, 0, 0)
         volume_controls.addWidget(self.volume_icon_label)
         volume_controls.addWidget(self.volume_slider)
         volume_widget = QWidget()
         volume_widget.setLayout(volume_controls)
+        volume_widget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
 
-        # 3. Add both groups to the layout
-        # The button group spans all 3 columns and is centered within them.
-        controls_row.addWidget(center_widget, 0, 0, 1, 3, alignment=Qt.AlignHCenter)
-        # The volume group is placed in the 3rd column (index 2) and aligned to the right.
-        controls_row.addWidget(volume_widget, 0, 2, alignment=Qt.AlignRight)
-
-        # Make the outer columns stretchable to push the volume slider to the edge.
-        controls_row.setColumnStretch(0, 1)
-        controls_row.setColumnStretch(2, 1)
+        controls_row = QHBoxLayout()
+        controls_row.setSpacing(0)
+        controls_row.setContentsMargins(0, 0, 0, 0)
+        controls_row.addWidget(center_widget, 1)     # center widget takes all the central space
+        controls_row.addWidget(volume_widget, 0)     # volume stays right
 
         main_col.addLayout(controls_row)
 
@@ -2006,16 +2018,16 @@ class MediaPlayer(QMainWindow):
         #controlBtn { background: transparent; color: #654321; font-size: 20px; border: none; border-radius: 20px; width: 40px; height: 40px; padding: 0px; }
         #controlBtn:hover { background-color: rgba(0,0,0,0.04); color: #4a2c2a; }
         #controlBtn:pressed { background-color: rgba(0,0,0,0.08); padding-top: 1px; padding-left: 1px; }
-        QSlider::groove:horizontal { height: 6px; background-color: #c2a882; border-radius: 3px; }
+        QSlider::groove:horizontal { height: 6px; background-color: #c2a882; border-radius: 3px; margin: 0 1px; }
         QSlider::handle:horizontal { 
-            width: 18px; 
-            height: 18px; 
+            width: 20px; 
+            height: 20px; 
             background-color: #4a2c2a; 
-            border-radius: 9px; 
-            margin: -6px 0; 
+            border-radius: 10px; 
+            margin: -7px 0; 
         }
         QSlider::sub-page:horizontal { background-color: #e76f51; border-radius: 3px; }
-        #timeLabel, #durLabel { font-family: '{self._ui_font}'; font-size: 13px; color: #654321; }
+        QSlider::add-page:horizontal { background-color: #c2a882; border-radius: 3px; }
         #silenceIndicator { color: #b00000; font-size: 18px; margin: 0 8px; padding-bottom: 3px; }
         #upNext::item { min-height: 24px; height: 24px; padding: 3px 8px; font-size: 13px; }
         #upNext::item:hover { background-color: rgba(239, 227, 200, 0.7); }
