@@ -15,8 +15,33 @@ import json
 import time
 import logging
 import zipfile
+import qtawesome as qta
+from PySide6.QtGui import QIcon
 from pathlib import Path
 from datetime import datetime
+
+from PySide6.QtGui import QIcon, QPixmap, QPainter
+from PySide6.QtSvg import QSvgRenderer
+from PySide6.QtCore import QSize, QRectF
+
+def load_svg_icon(path, size=QSize(18, 18)):
+    renderer = QSvgRenderer(path)
+    pixmap = QPixmap(size)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    renderer.render(painter, QRectF(0, 0, size.width(), size.height()))
+    painter.end()
+    return QIcon(pixmap)
+
+def playlist_icon_for_type(item_type):
+    if item_type == 'youtube':
+        return load_svg_icon('icons/youtube-fa7.svg', QSize(28, 28))
+    elif item_type == 'bilibili':
+        return load_svg_icon('icons/bilibili-fa7.svg', QSize(28, 28))
+    elif item_type == 'local':
+        return "🎬"
+    else:
+        return "🎵"
 
 # Initialize logging
 def setup_logging(level='INFO'):
@@ -770,7 +795,7 @@ class PlaylistTree(QTreeWidget):
 class MediaPlayer(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Silence Auto-Player")
+        self.setWindowTitle("Silence Suzuka Player")
         self.setGeometry(100, 100, 1180, 760)
 
         # Icons
@@ -910,10 +935,11 @@ class MediaPlayer(QMainWindow):
     def _build_ui(self):
         central = QWidget(); central.setObjectName('bgRoot'); self.setCentralWidget(central)
         root = QVBoxLayout(central); root.setContentsMargins(8, 8, 8, 8); root.setSpacing(8)
+        icon_size = QSize(22, 22)
 
         # Top bar
         top = QHBoxLayout(); top.setSpacing(8)
-        title = QLabel("Silence Auto-Player"); title.setObjectName('titleLabel'); title.setFont(QFont(self._serif_font))
+        title = QLabel("Silence Suzuka Player"); title.setObjectName('titleLabel'); title.setFont(QFont(self._serif_font))
         # Scope chip (Scoped Library mode)
         self.scope_label = ClickableLabel("Scope: Library"); self.scope_label.setObjectName('scopeChip'); self.scope_label.setVisible(False); self.scope_label.setFont(QFont(self._ui_font))
         self.scope_label.clicked.connect(lambda: self._on_scope_label_clicked())
@@ -1184,14 +1210,27 @@ class MediaPlayer(QMainWindow):
         self.playlist_tree.itemDoubleClicked.connect(self.on_tree_item_double_clicked)
         self.playlist_tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.playlist_tree.customContextMenuRequested.connect(self._show_playlist_context_menu)
-        self.playlist_tree.setFont(QFont(self._serif_font))
+
+        # Set playlist font: Lora, italic, bold, size 14
+        playlist_font = QFont(self._serif_font, 14)
+        playlist_font.setItalic(True)
+        playlist_font.setWeight(QFont.Bold)
+        self.playlist_tree.setFont(playlist_font)
+
         self.playlist_stack.addWidget(self.playlist_tree)
+
+         # --- ADD THESE LINES FOR ICON SIZE AND ROW HEIGHT ---
+        self.playlist_tree.setIconSize(QSize(28, 28))  # Make icon 28x28 (or adjust as needed)
+        self.playlist_tree.setStyleSheet("#playlistTree::item { min-height: 32px; }")  # Row height for vertical alignment
 
         # 2. The Empty State Widget (Index 1)
         self.empty_state_widget = QWidget()
         empty_layout = QVBoxLayout(self.empty_state_widget)
         empty_layout.addStretch()
-        empty_icon = QLabel("🎵")
+        empty_icon = QLabel()
+        empty_icon.setObjectName('emptyStateIcon')
+        empty_icon.setAlignment(Qt.AlignCenter)
+        empty_icon.setPixmap(load_svg_icon('icons/music-off-tabler.svg', QSize(48, 48)).pixmap(48, 48))
         empty_icon.setObjectName('emptyStateIcon')
         empty_icon.setAlignment(Qt.AlignCenter)
         empty_layout.addWidget(empty_icon)
@@ -1215,18 +1254,56 @@ class MediaPlayer(QMainWindow):
         self.video_frame.setStyleSheet("background:#000; border-radius: 6px"); main_col.addWidget(self.video_frame, 1)
 
         # Now Playing
+        # Now Playing
         now = QVBoxLayout()
         self.thumbnail_label = QLabel(); self.thumbnail_label.setFixedSize(160, 90)
         self.thumbnail_label.setStyleSheet("background-color:#000;border:1px solid #282828"); self.thumbnail_label.setAlignment(Qt.AlignCenter); self.thumbnail_label.hide()
         now.addWidget(self.thumbnail_label)
-        font = QFont(self._jp_font, 24, QFont.Bold)
-        font.setStyleStrategy(QFont.PreferAntialias)
+        # Use Lora, bold, italic, size 24 for track label
+        track_font = QFont(self._serif_font, 24, QFont.Bold)
+        track_font.setItalic(True)
+        track_font.setStyleStrategy(QFont.PreferAntialias)
         self.track_label = QLabel("No track playing")
         self.track_label.setObjectName('trackLabel')
-        self.track_label.setFont(font)
-        # print(f"Track label QFont family: {self.track_label.font().family()}")
+        self.track_label.setFont(track_font)
         self.track_label.setWordWrap(True)
-        now.addWidget(self.track_label)
+        self.track_label.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
+        self.track_label.setStyleSheet("""
+            color: #4a2c2a;
+            background: transparent;
+            margin-top: 14px;
+            margin-bottom: 12px;
+            letter-spacing: 0.5px;
+            font-size: 24px;
+        """)
+
+        # Now Playing
+        now = QVBoxLayout()
+        self.thumbnail_label = QLabel(); self.thumbnail_label.setFixedSize(160, 90)
+        self.thumbnail_label.setStyleSheet("background-color:#000;border:1px solid #282828"); self.thumbnail_label.setAlignment(Qt.AlignCenter); self.thumbnail_label.hide()
+        now.addWidget(self.thumbnail_label)
+
+        track_font = QFont(self._serif_font, 24, QFont.Bold)
+        track_font.setItalic(True)
+        track_font.setStyleStrategy(QFont.PreferAntialias)
+        self.track_label = QLabel("No track playing")
+        self.track_label.setObjectName('trackLabel')
+        self.track_label.setFont(track_font)
+        self.track_label.setWordWrap(True)
+        self.track_label.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
+        self.track_label.setStyleSheet("""
+            color: #4a2c2a;
+            background: transparent;
+            margin-top: 14px;
+            margin-bottom: 12px;
+            letter-spacing: 0.5px;
+            font-size: 24px;
+        """)
+        now.addWidget(self.track_label)  # <-- THIS LINE ADDS THE TRACK TITLE TO THE LAYOUT!
+
+        prog = QHBoxLayout()
+        self.time_label = QLabel("0:00")
+
         prog = QHBoxLayout(); self.time_label = QLabel("0:00"); self.time_label.setObjectName('timeLabel'); self.time_label.setFont(QFont(self._ui_font)); self.progress = HoverSlider(Qt.Horizontal); self.progress.sliderPressed.connect(lambda: setattr(self, '_user_scrubbing', True)); self.progress.sliderReleased.connect(self._on_slider_released); self.progress.sliderMoved.connect(self._on_slider_moved); self.dur_label = QLabel("0:00"); self.dur_label.setObjectName('durLabel'); self.dur_label.setFont(QFont(self._ui_font))
         prog.addWidget(self.time_label); prog.addWidget(self.progress, 1); prog.addWidget(self.dur_label); now.addLayout(prog); main_col.addLayout(now)
         # Up Next panel (toggle via Settings)
@@ -1251,7 +1328,7 @@ class MediaPlayer(QMainWindow):
             pass
 
         # Control bar
-        controls_bar = QHBoxLayout(); icon_size = QSize(22, 22)
+
         # Shuffle
         self.shuffle_btn = QPushButton()
         self.shuffle_btn.setCheckable(True)
@@ -1264,29 +1341,27 @@ class MediaPlayer(QMainWindow):
                 self.shuffle_btn.setText("🔀")
         except Exception:
             self.shuffle_btn.setText("🔀")
-        self.shuffle_btn.clicked.connect(self._toggle_shuffle); controls_bar.addWidget(self.shuffle_btn)
+        self.shuffle_btn.clicked.connect(self._toggle_shuffle); 
         # Prev / Play-Pause / Next
         prev_btn = QPushButton()
         prev_btn.setIcon(self.prev_icon)
         prev_btn.setIconSize(icon_size)
         prev_btn.setObjectName('controlBtn')
         prev_btn.clicked.connect(self.previous_track)
-        controls_bar.addWidget(prev_btn)
+     
 
         self.play_pause_btn = QPushButton()
         # initial icon will be set after we prepare tinted variants below
         self.play_pause_btn.setIconSize(QSize(30, 30))
         self.play_pause_btn.setObjectName('playPauseBtn')
         self.play_pause_btn.clicked.connect(self.toggle_play_pause)
-        controls_bar.addWidget(self.play_pause_btn)
-
+        
         next_btn = QPushButton()
         next_btn.setIcon(self.next_icon)
         next_btn.setIconSize(icon_size)
         next_btn.setObjectName('controlBtn')
         next_btn.clicked.connect(self.next_track)
-        controls_bar.addWidget(next_btn)
-
+        
         # --- Render white + brown tinted versions for play.svg and pause.svg (hover effect) ---
         try:
             svg_play = APP_DIR / 'icons' / 'play.svg'
@@ -1356,8 +1431,7 @@ class MediaPlayer(QMainWindow):
                 self.repeat_btn.setText("🔁")
         except Exception:
             self.repeat_btn.setText("🔁")
-        self.repeat_btn.clicked.connect(self._toggle_repeat); controls_bar.addWidget(self.repeat_btn)
-        controls_bar.addStretch()
+        self.repeat_btn.clicked.connect(self._toggle_repeat); 
         # --- Volume icon: prefer icons/volume.svg rendered with QSvgRenderer (hi-dpi aware) ---
         try:
             from PySide6.QtCore import QRectF
@@ -1420,12 +1494,44 @@ class MediaPlayer(QMainWindow):
             except Exception:
                 pass
 
-            controls_bar.addWidget(self.volume_icon_label)
+            
         except Exception:
             controls_bar.addWidget(QLabel("🔊"))
         # --- end volume icon block ---
         self.volume_slider = HoverSlider(Qt.Horizontal); self.volume_slider.setObjectName('volumeSlider'); self.volume_slider.setRange(0, 100); self.volume_slider.setValue(80); self.volume_slider.setFixedWidth(120); self.volume_slider.valueChanged.connect(self.set_volume)
-        controls_bar.addWidget(self.volume_slider); main_col.addLayout(controls_bar)
+        from PySide6.QtWidgets import QSizePolicy
+
+        # --- Centered playback controls, right-aligned volume ---
+        center_controls = QHBoxLayout()
+        center_controls.setSpacing(12)
+        center_controls.setContentsMargins(0, 0, 0, 0)
+        center_controls.addStretch()
+        center_controls.addWidget(self.shuffle_btn)
+        center_controls.addWidget(prev_btn)
+        center_controls.addWidget(self.play_pause_btn)
+        center_controls.addWidget(next_btn)
+        center_controls.addWidget(self.repeat_btn)
+        center_controls.addStretch()
+        center_widget = QWidget()
+        center_widget.setLayout(center_controls)
+        center_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)  # <-- ensures it expands
+
+        volume_controls = QHBoxLayout()
+        volume_controls.setSpacing(6)
+        volume_controls.setContentsMargins(0, 0, 0, 0)
+        volume_controls.addWidget(self.volume_icon_label)
+        volume_controls.addWidget(self.volume_slider)
+        volume_widget = QWidget()
+        volume_widget.setLayout(volume_controls)
+        volume_widget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
+
+        controls_row = QHBoxLayout()
+        controls_row.setSpacing(0)
+        controls_row.setContentsMargins(0, 0, 0, 0)
+        controls_row.addWidget(center_widget, 1)     # center widget takes all the central space
+        controls_row.addWidget(volume_widget, 0)     # volume stays right
+
+        main_col.addLayout(controls_row)
 
         self.status = QStatusBar(); self.setStatusBar(self.status)
 
@@ -2059,6 +2165,7 @@ class MediaPlayer(QMainWindow):
             self.mpv['demuxer-readahead-secs'] = '10'
             self.mpv['user-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
             self.mpv['hr-seek'] = 'yes'
+            self.mpv['gapless-audio'] = 'yes'
 
             @self.mpv.property_observer('eof-reached')
             def _eof(_name, value):
@@ -2136,7 +2243,7 @@ class MediaPlayer(QMainWindow):
             return
         icon = self.play_icon
         self.tray_icon = QSystemTrayIcon(icon, self)
-        self.tray_icon.setToolTip("Silence Auto-Player (mpv)")
+        self.tray_icon.setToolTip("Silence Suzuka Player")
         tray_menu = QMenu()
         self.tray_play_pause = tray_menu.addAction("Play")
         self.tray_play_pause.triggered.connect(self.toggle_play_pause)
@@ -2193,9 +2300,9 @@ class MediaPlayer(QMainWindow):
         else:
             self.tray_play_pause.setText("Play"); self.tray_icon.setIcon(self.play_icon)
         if 0 <= self.current_index < len(self.playlist):
-            self.tray_icon.setToolTip(f"Silence Auto-Player\nNow Playing: {self.playlist[self.current_index].get('title','Unknown')}")
+            self.tray_icon.setToolTip(f"Silence Suzuka Player\nNow Playing: {self.playlist[self.current_index].get('title','Unknown')}")
         else:
-            self.tray_icon.setToolTip("Silence Auto-Player")
+            self.tray_icon.setToolTip("Silence Suzuka Player")
 
     # Persistence
     def _load_files(self):
@@ -2413,7 +2520,6 @@ class MediaPlayer(QMainWindow):
                     gnode.setFont(0, _gf)
                 except Exception:
                     pass
-                # Normalize and store a stable group key on the header
                 norm_key = key if key else (g.get('title') or ptitle)
                 gnode.setData(0, Qt.UserRole, ('group', norm_key))
                 try:
@@ -2422,30 +2528,48 @@ class MediaPlayer(QMainWindow):
                     pass
                 gnode.setExpanded(False)
                 for idx, it in arr:
-                    node = QTreeWidgetItem(gnode, [self._display_text(it)])
+                    icon = playlist_icon_for_type(it.get('type'))
+                    node = QTreeWidgetItem([it.get('title', 'Unknown')])
+                    if isinstance(icon, QIcon):
+                        node.setIcon(0, icon)  # Show the SVG icon (YouTube)
+                    else:
+                        node.setText(0, f"{icon} {it.get('title', 'Unknown')}")  # Show emoji for other types
                     try:
                         node.setFont(0, QFont(self._serif_font))
                     except Exception:
                         pass
                     node.setData(0, Qt.UserRole, ('current', idx, it))
+                    gnode.addChild(node)
             if '' in group_map:
                 for idx, it in group_map['']['items']:
-                    node = QTreeWidgetItem(root, [self._display_text(it)])
+                    icon = playlist_icon_for_type(it.get('type'))
+                    node = QTreeWidgetItem([it.get('title', 'Unknown')])
+                    if isinstance(icon, QIcon):
+                        node.setIcon(0, icon)  # Show the SVG icon (YouTube)
+                    else:
+                        node.setText(0, f"{icon} {it.get('title', 'Unknown')}")  # Show emoji for other types
                     try:
                         node.setFont(0, QFont(self._serif_font))
                     except Exception:
                         pass
                     node.setData(0, Qt.UserRole, ('current', idx, it))
+                    root.addChild(node)
         else:
             # Fallback to previous grouping behavior
             if not getattr(self, 'grouped_view', False):
                 for idx, it in enumerate(self.playlist):
-                    node = QTreeWidgetItem(root, [self._display_text(it)])
+                    icon = playlist_icon_for_type(it.get('type'))
+                    node = QTreeWidgetItem([it.get('title', 'Unknown')])
+                    if isinstance(icon, QIcon):
+                        node.setIcon(0, icon)  # Show the SVG icon (YouTube)
+                    else:
+                        node.setText(0, f"{icon} {it.get('title', 'Unknown')}")  # Show emoji for other types
                     try:
                         node.setFont(0, QFont(self._serif_font))
                     except Exception:
                         pass
                     node.setData(0, Qt.UserRole, ('current', idx, it))
+                    root.addChild(node)
             else:
                 groups = {'youtube': [], 'bilibili': [], 'local': []}
                 for idx, it in enumerate(self.playlist):
@@ -2468,19 +2592,25 @@ class MediaPlayer(QMainWindow):
                     except Exception:
                         pass
                     for idx, it in arr:
-                        node = QTreeWidgetItem(gnode, [self._display_text(it)])
+                        icon = playlist_icon_for_type(it.get('type'))
+                        node = QTreeWidgetItem([it.get('title', 'Unknown')])
+                        if isinstance(icon, QIcon):
+                            node.setIcon(0, icon)  # Show the SVG icon (YouTube)
+                        else:
+                            node.setText(0, f"{icon} {it.get('title', 'Unknown')}")  # Show emoji for other types
                         try:
                             node.setFont(0, QFont(self._serif_font))
                         except Exception:
                             pass
                         node.setData(0, Qt.UserRole, ('current', idx, it))
+                        gnode.addChild(node)
         if not self.playlist:
             self.playlist_stack.setCurrentIndex(1)  # Show empty state
         else:
-            self.playlist_stack.setCurrentIndex(0)  # Show playlist          
+            self.playlist_stack.setCurrentIndex(0)  # Show playlist  
 
     def _display_text(self, item):
-        icon = "🎬" if item.get('type') == 'youtube' else "📺" if item.get('type') == 'bilibili' else "📁"
+        icon = "🔴" if item.get('type') == 'youtube' else "🐟" if item.get('type') == 'bilibili' else "🎬"
         return f"{icon} {item.get('title','Unknown')}"
 
     def _apply_menu_theme(self, menu: QMenu):
@@ -2786,6 +2916,27 @@ class MediaPlayer(QMainWindow):
             return u2
         except Exception:
             return url
+
+    def _is_local_file(self, url):
+        """
+        Returns True if the url refers to a local file path or file:// URL.
+        Handles file:///C:/... (Windows), file:///home/... (Unix), and plain file paths.
+        """
+        import os
+        from urllib.parse import urlparse, unquote
+
+        if not url:
+            return False
+        if url.startswith('file://'):
+            parsed = urlparse(url)
+            path = unquote(parsed.path)
+            # On Windows, path often starts with a slash: /C:/Users/...
+            if os.name == 'nt' and path.startswith('/'):
+                path = path[1:]  # Remove leading slash for Windows
+            return os.path.isfile(path)
+        if url.startswith('http://') or url.startswith('https://'):
+            return False
+        return os.path.isfile(url) or (os.path.exists(url) and not url.startswith(('http://', 'https://')))       
 
     def _find_resume_key_for_url(self, url: str):
         try:
@@ -3702,6 +3853,13 @@ class MediaPlayer(QMainWindow):
                 return
         self._end_session()
         it = self.playlist[self.current_index]
+        url = it.get('url', '')
+
+        # Set keep-open dynamically for gapless local playback
+        if self._is_local_file(url):
+            self.mpv['keep-open'] = 'yes'
+        else:
+            self.mpv['keep-open'] = 'no'        
 
         # Site-specific options
         try:
