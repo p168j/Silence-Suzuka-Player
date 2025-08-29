@@ -939,7 +939,7 @@ class MediaPlayer(QMainWindow):
 
         # Top bar
         top = QHBoxLayout(); top.setSpacing(8)
-        title = QLabel("Silence Suzuka Player"); title.setObjectName('titleLabel'); title.setFont(QFont(self._serif_font))
+        title = QLabel("Silence Suzuka Player"); title.setObjectName('titleLabel'); title.setFont(self._font_serif(20, italic=True, bold=True))
         # Scope chip (Scoped Library mode)
         self.scope_label = ClickableLabel("Scope: Library"); self.scope_label.setObjectName('scopeChip'); self.scope_label.setVisible(False); self.scope_label.setFont(QFont(self._ui_font))
         self.scope_label.clicked.connect(lambda: self._on_scope_label_clicked())
@@ -1210,12 +1210,12 @@ class MediaPlayer(QMainWindow):
         self.playlist_tree.itemDoubleClicked.connect(self.on_tree_item_double_clicked)
         self.playlist_tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.playlist_tree.customContextMenuRequested.connect(self._show_playlist_context_menu)
+        
+        # Set text elide mode for single-line with ellipsis
+        self.playlist_tree.setTextElideMode(Qt.ElideRight)
 
         # Set playlist font: Lora, italic, bold, size 14
-        playlist_font = QFont(self._serif_font, 14)
-        playlist_font.setItalic(True)
-        playlist_font.setWeight(QFont.Bold)
-        self.playlist_tree.setFont(playlist_font)
+        self.playlist_tree.setFont(self._font_serif(14, italic=True, bold=True))
 
         self.playlist_stack.addWidget(self.playlist_tree)
 
@@ -1257,13 +1257,10 @@ class MediaPlayer(QMainWindow):
         now_playing_layout = QVBoxLayout()
 
         # Track Title Label
-        track_font = QFont(self._serif_font, 24, QFont.Bold) # Revert to 24 for balance
-        track_font.setItalic(True)
-        track_font.setStyleStrategy(QFont.PreferAntialias)
         self.track_label = QLabel("No track playing")
         self.track_label.setObjectName('trackLabel')
-        self.track_label.setFont(track_font)
-        self.track_label.setWordWrap(True)
+        self.track_label.setFont(self._font_serif(24, italic=True, bold=True))
+        self.track_label.setWordWrap(False)  # Disable word wrap for eliding
         self.track_label.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         self.track_label.setStyleSheet("""
             color: #4a2c2a;
@@ -1272,6 +1269,7 @@ class MediaPlayer(QMainWindow):
             margin-bottom: 12px;
             letter-spacing: 0.5px;
         """)
+        self._track_title_full = "No track playing"  # Store full text for eliding
         now_playing_layout.addWidget(self.track_label)
 
         # Progress Bar and Time Labels
@@ -1305,7 +1303,7 @@ class MediaPlayer(QMainWindow):
             except Exception:
                 pass
             up_layout.addWidget(self.up_next_header)
-            self.up_next = QTreeWidget(); self.up_next.setHeaderHidden(True); self.up_next.setObjectName('upNext'); self.up_next.setFixedHeight(140); self.up_next.setFont(QFont(self._serif_font)); self.up_next.setAlternatingRowColors(True); self.up_next.setIndentation(12)
+            self.up_next = QTreeWidget(); self.up_next.setHeaderHidden(True); self.up_next.setObjectName('upNext'); self.up_next.setFixedHeight(140); self.up_next.setFont(self._font_serif(14, italic=True, bold=True)); self.up_next.setAlternatingRowColors(True); self.up_next.setIndentation(12)
             self.up_next.setContextMenuPolicy(Qt.CustomContextMenu)
             self.up_next.customContextMenuRequested.connect(self._show_up_next_menu)
             self.up_next.itemDoubleClicked.connect(self._on_up_next_double_clicked)
@@ -1701,25 +1699,68 @@ class MediaPlayer(QMainWindow):
 
         return super().eventFilter(obj, event)
     
+    def _set_track_title(self, text):
+        """Set track title with eliding support"""
+        self._track_title_full = text or ""
+        self._update_track_label_elide()
+
+    def _update_track_label_elide(self):
+        """Update track label with proper eliding based on current width"""
+        try:
+            if not hasattr(self, '_track_title_full'):
+                return
+            
+            metrics = QFontMetrics(self.track_label.font())
+            available_width = self.track_label.width() - 20  # margin for safety
+            if available_width <= 0:
+                available_width = 200  # fallback width
+            
+            elided_text = metrics.elidedText(self._track_title_full, Qt.ElideRight, available_width)
+            self.track_label.setText(elided_text)
+        except Exception:
+            # Fallback: just set the text directly
+            if hasattr(self, '_track_title_full'):
+                self.track_label.setText(self._track_title_full)
+
+    def resizeEvent(self, event):
+        """Handle window resize to update elided text"""
+        super().resizeEvent(event)
+        try:
+            self._update_track_label_elide()
+        except Exception:
+            pass
+
+    def _font_serif(self, size, italic=False, bold=False):
+        """Create a serif font with proper styling and letter spacing"""
+        font = QFont(self._serif_font, size)
+        font.setItalic(italic)
+        if bold:
+            font.setWeight(QFont.Bold)
+        font.setStyleStrategy(QFont.PreferAntialias)
+        font.setLetterSpacing(QFont.AbsoluteSpacing, 0.5)
+        return font
+
     def _init_fonts(self):
         # Default to system fonts similar to the mock
         self._ui_font = 'Segoe UI'
         self._serif_font = 'Georgia'
+        self._jp_serif_font = 'Noto Serif JP'  # Initialize Japanese serif fallback
         try:
             fonts_dir = APP_DIR / 'assets' / 'fonts'
             # print(f"Font loader scanning: {fonts_dir}")
             added_fams = []
             if fonts_dir.exists():
-                # Load any TTFs present (handles files named like Inter_18pt-Regular.ttf as well)
-                for p in fonts_dir.glob('*.ttf'):
-                    try:
-                        rid = QFontDatabase.addApplicationFont(str(p))
-                        if rid != -1:
-                            fams_for = QFontDatabase.applicationFontFamilies(rid)
-                            for fam in fams_for:
-                                added_fams.append(fam)
-                    except Exception:
-                        pass
+                # Load any TTFs and OTFs present
+                for ext in ['*.ttf', '*.otf']:
+                    for p in fonts_dir.glob(ext):
+                        try:
+                            rid = QFontDatabase.addApplicationFont(str(p))
+                            if rid != -1:
+                                fams_for = QFontDatabase.applicationFontFamilies(rid)
+                                for fam in fams_for:
+                                    added_fams.append(fam)
+                        except Exception:
+                            pass
 
                 # --- Noto Sans JP font load ---
                 noto_jp_path = fonts_dir / 'NotoSansJP-Regular.otf'
@@ -1732,7 +1773,18 @@ class MediaPlayer(QMainWindow):
                         self._jp_font = 'Noto Sans JP'
                 else:
                     self._jp_font = 'Noto Sans JP'  # fallback to system font if not found
-                # print(f"self._jp_font: {self._jp_font}")    
+
+                # --- Noto Serif JP font load ---
+                noto_serif_jp_path = fonts_dir / 'NotoSerifJP-Regular.otf'
+                if noto_serif_jp_path.exists():
+                    font_id = QFontDatabase.addApplicationFont(str(noto_serif_jp_path))
+                    families = QFontDatabase.applicationFontFamilies(font_id)
+                    if families:
+                        self._jp_serif_font = families[0]  # Usually "Noto Serif JP"
+                    else:
+                        self._jp_serif_font = 'Noto Serif JP'
+                else:
+                    self._jp_serif_font = 'Noto Serif JP'  # fallback to system font if not found
 
                 # Set application-wide fallback font (Inter, Noto Sans JP, Segoe UI, sans-serif)
                 app_font = QFont(f"{self._ui_font}, {self._jp_font}, Segoe UI, sans-serif", 14)
@@ -1768,6 +1820,15 @@ class MediaPlayer(QMainWindow):
                 self._ui_font = inter
             if lora:
                 self._serif_font = lora
+
+            # Set up font substitutions for Japanese text
+            try:
+                QFont.insertSubstitution(self._serif_font, self._jp_serif_font)
+                QFont.insertSubstitution(self._ui_font, self._jp_font)
+                # print(f"Font substitutions: {self._serif_font} -> {self._jp_serif_font}, {self._ui_font} -> {self._jp_font}")
+            except Exception:
+                pass
+
             # print(f"Using UI font: {self._ui_font}, Serif font: {self._serif_font}")
             # No need to set QApplication font again here; already set above!
         except Exception:
@@ -1784,6 +1845,8 @@ class MediaPlayer(QMainWindow):
                 ("Inter-VariableFont_slnt,wght.ttf", "https://github.com/google/fonts/raw/main/ofl/inter/Inter-VariableFont_slnt,wght.ttf"),
                 ("Lora-VariableFont_wght.ttf", "https://github.com/google/fonts/raw/main/ofl/lora/Lora-VariableFont_wght.ttf"),
                 ("Lora-Italic-VariableFont_wght.ttf", "https://github.com/google/fonts/raw/main/ofl/lora/Lora-Italic-VariableFont_wght.ttf"),
+                ("NotoSerifJP-Regular.otf", "https://github.com/google/fonts/raw/main/ofl/notoserifjp/static/NotoSerifJP-Regular.otf"),
+                ("NotoSansJP-Regular.otf", "https://github.com/google/fonts/raw/main/ofl/notosansjp/static/NotoSansJP-Regular.otf"),
             ]
             for fname, url in targets:
                 path = fonts_dir / fname
@@ -2503,9 +2566,7 @@ class MediaPlayer(QMainWindow):
                 arr = g.get('items') or []
                 gnode = QTreeWidgetItem(root, [f"📃 {ptitle} ({len(arr)})"])
                 try:
-                    _gf = QFont(self._serif_font)
-                    _gf.setItalic(True)
-                    gnode.setFont(0, _gf)
+                    gnode.setFont(0, self._font_serif(14, italic=True, bold=True))
                 except Exception:
                     pass
                 norm_key = key if key else (g.get('title') or ptitle)
@@ -2523,7 +2584,7 @@ class MediaPlayer(QMainWindow):
                     else:
                         node.setText(0, f"{icon} {it.get('title', 'Unknown')}")  # Show emoji for other types
                     try:
-                        node.setFont(0, QFont(self._serif_font))
+                        node.setFont(0, self._font_serif(14, italic=True, bold=True))
                     except Exception:
                         pass
                     node.setData(0, Qt.UserRole, ('current', idx, it))
@@ -2537,7 +2598,7 @@ class MediaPlayer(QMainWindow):
                     else:
                         node.setText(0, f"{icon} {it.get('title', 'Unknown')}")  # Show emoji for other types
                     try:
-                        node.setFont(0, QFont(self._serif_font))
+                        node.setFont(0, self._font_serif(14, italic=True, bold=True))
                     except Exception:
                         pass
                     node.setData(0, Qt.UserRole, ('current', idx, it))
@@ -2553,7 +2614,7 @@ class MediaPlayer(QMainWindow):
                     else:
                         node.setText(0, f"{icon} {it.get('title', 'Unknown')}")  # Show emoji for other types
                     try:
-                        node.setFont(0, QFont(self._serif_font))
+                        node.setFont(0, self._font_serif(14, italic=True, bold=True))
                     except Exception:
                         pass
                     node.setData(0, Qt.UserRole, ('current', idx, it))
@@ -2569,9 +2630,7 @@ class MediaPlayer(QMainWindow):
                     if not arr: continue
                     gnode = QTreeWidgetItem(root, [f"{names[g]} ({len(arr)})"])
                     try:
-                        _gf2 = QFont(self._serif_font)
-                        _gf2.setItalic(True)
-                        gnode.setFont(0, _gf2)
+                        gnode.setFont(0, self._font_serif(14, italic=True, bold=True))
                     except Exception:
                         pass
                     gnode.setData(0, Qt.UserRole, ('group', g))
@@ -2587,7 +2646,7 @@ class MediaPlayer(QMainWindow):
                         else:
                             node.setText(0, f"{icon} {it.get('title', 'Unknown')}")  # Show emoji for other types
                         try:
-                            node.setFont(0, QFont(self._serif_font))
+                            node.setFont(0, self._font_serif(14, italic=True, bold=True))
                         except Exception:
                             pass
                         node.setData(0, Qt.UserRole, ('current', idx, it))
@@ -2868,7 +2927,7 @@ class MediaPlayer(QMainWindow):
             # Update now playing label if this is current
             if 0 <= self.current_index < len(self.playlist):
                 if self.playlist[self.current_index].get('url') == url:
-                    self.track_label.setText(title)
+                    self._set_track_title(title)
 
     def _toggle_group(self, checked):
         """Toggle grouped view and refresh the playlist tree."""
@@ -3865,7 +3924,7 @@ class MediaPlayer(QMainWindow):
         except Exception:
             pass
 
-        self.track_label.setText(it.get('title', 'Unknown'))
+        self._set_track_title(it.get('title', 'Unknown'))
         self._highlight_current_row()
         # Seamless resume: load with start option to avoid 0:00 flash
         _url = it.get('url')
