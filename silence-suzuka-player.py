@@ -962,10 +962,17 @@ class MediaPlayer(QMainWindow):
         # Content
         content = QHBoxLayout(); content.setSpacing(8); root.addLayout(content, 1)
 
-        # Sidebar
+        # Main area: video frame + controls (now on the left, compact)
+        main_col = QVBoxLayout(); 
+        video_widget = QWidget(); video_widget.setMaximumWidth(400); video_widget.setMinimumWidth(300)
+        video_layout = QVBoxLayout(video_widget); video_layout.setContentsMargins(0, 0, 0, 0)
+        video_layout.addLayout(main_col)
+        content.addWidget(video_widget, 0)
+
+        # Sidebar (now on the right, gets remaining space)
         side_widget = QWidget(); side_widget.setObjectName('sidebar'); side_layout = QVBoxLayout(side_widget); side_layout.setSpacing(10)
         side_layout.setContentsMargins(8, 8, 8, 8)
-        content.addWidget(side_widget, 0)
+        content.addWidget(side_widget, 1)
 
                 # ---- Add Media (SVG chevron) replacement ----
         from PySide6.QtCore import QByteArray, QRectF
@@ -1246,8 +1253,7 @@ class MediaPlayer(QMainWindow):
         # Add the container to the sidebar
         side_layout.addWidget(self.playlist_container, 1)
 
-        # Main area: video frame + controls
-        main_col = QVBoxLayout(); content.addLayout(main_col, 1)
+        # Video frame (now in the left compact area)
         self.video_frame = QWidget(); self.video_frame.setObjectName('videoWidget')
         self.video_frame.setStyleSheet("background:#000; border-radius: 6px"); main_col.addWidget(self.video_frame, 1)
 
@@ -1515,7 +1521,8 @@ class MediaPlayer(QMainWindow):
         controls_row.setColumnStretch(0, 1)
         controls_row.setColumnStretch(2, 1)
 
-        main_col.addLayout(controls_row)
+        # Add controls to root layout for full-width span
+        root.addLayout(controls_row)
 
         self.status = QStatusBar(); self.setStatusBar(self.status)
 
