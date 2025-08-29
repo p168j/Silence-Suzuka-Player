@@ -5032,7 +5032,12 @@ class MediaPlayer(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    w = MediaPlayer(); w.show()
+    w = MediaPlayer()
+    # Initialize typography AFTER the window builds and applies its theme so our QSS lands last
+    from ui.typography import TypographyManager
+    typo = TypographyManager(app, project_root=APP_DIR)
+    typo.install()
+    w.show()
     sys.exit(app.exec())
 
 
