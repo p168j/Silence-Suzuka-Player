@@ -24,6 +24,13 @@ build/
 save/
 logs/
 backup/
+cookies.txt
+positions.json
+stats.json
+completed.json
+current.json
+
+
 
 # Ignore IDE/editor/project files
 .vscode/
