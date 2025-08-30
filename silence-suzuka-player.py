@@ -741,6 +741,218 @@ class HoverSlider(QSlider):
         painter.drawEllipse(scaled_rect)
 
 
+# --- Animated button with bounce back effect (Style A) ---
+class AnimatedButton(QPushButton):
+    """
+    Custom button that implements bounce back effect from style-a.html mockup.
+    Features:
+    - Bounce animation on click with satisfying elastic easing
+    - Smooth hover scaling
+    - Warm color scheme support
+    """
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self._scale = 1.0
+        
+        # Hover animation
+        self._hover_animation = QPropertyAnimation(self, b"scale")
+        self._hover_animation.setDuration(150)
+        self._hover_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        
+        # Bounce animation (for click feedback)
+        self._bounce_animation = QPropertyAnimation(self, b"scale")
+        self._bounce_animation.setDuration(600)
+        self._bounce_animation.setEasingCurve(QEasingCurve.Type.OutElastic)
+        
+        # Track pressed state for bounce effect
+        self._was_pressed = False
+        
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        if not self._bounce_animation.state() == QPropertyAnimation.Running:
+            self._hover_animation.stop()
+            self._hover_animation.setStartValue(self._scale)
+            self._hover_animation.setEndValue(1.05)  # 5% bigger on hover
+            self._hover_animation.start()
+    
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        if not self._bounce_animation.state() == QPropertyAnimation.Running:
+            self._hover_animation.stop()
+            self._hover_animation.setStartValue(self._scale)
+            self._hover_animation.setEndValue(1.0)
+            self._hover_animation.start()
+    
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        self._was_pressed = True
+        # Shrink on press
+        self._hover_animation.stop()
+        self._bounce_animation.stop()
+        self.setScale(0.95)
+    
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        if self._was_pressed:
+            self._was_pressed = False
+            # Trigger bounce back animation
+            self._bounce_animation.setStartValue(0.95)
+            self._bounce_animation.setEndValue(1.0)
+            # Create keyframes for the bounce: 95% -> 115% -> 100%
+            self._bounce_animation.setKeyValueAt(0.5, 1.15)  # Peak at 50% of animation
+            self._bounce_animation.start()
+    
+    def getScale(self):
+        return self._scale
+    
+    def setScale(self, value):
+        self._scale = value
+        self.update()
+    
+    scale = Property(float, getScale, setScale)
+    
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Apply scaling transform
+        rect = self.rect()
+        center = rect.center()
+        painter.translate(center)
+        painter.scale(self._scale, self._scale)
+        painter.translate(-center)
+        
+        # Let the default painting happen with our transform
+        super().paintEvent(event)
+
+
+# --- Integrated video preview widget (Option B) ---
+class IntegratedVideoWidget(QWidget):
+    """
+    Integrated video preview in corner of playlist from option-b-integrated-corner.html mockup.
+    Features:
+    - Gradient background styling
+    - Subtle shadows and borders
+    - Hover effects with green accent
+    - Positioned in bottom-right corner of playlist area
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(160, 120)
+        self._hover_scale = 1.0
+        
+        # Hover animation
+        self._hover_animation = QPropertyAnimation(self, b"hoverScale")
+        self._hover_animation.setDuration(300)
+        self._hover_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        
+        # Enable mouse tracking for hover effects
+        self.setMouseTracking(True)
+        
+        # Content layout
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Video icon and text
+        self.icon_label = QLabel("▶️")
+        self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.icon_label.setStyleSheet("font-size: 20px; margin-bottom: 6px; opacity: 0.7;")
+        
+        self.text_label = QLabel("Video\nPreview")
+        self.text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.text_label.setStyleSheet("""
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #999;
+            text-align: center;
+        """)
+        
+        layout.addWidget(self.icon_label)
+        layout.addWidget(self.text_label)
+        
+        # Apply base styling
+        self._apply_base_style()
+        
+    def _apply_base_style(self):
+        """Apply the gradient background and styling from the mockup"""
+        self.setStyleSheet("""
+            IntegratedVideoWidget {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #1a1a1a, stop:1 #0f0f0f);
+                border-radius: 8px;
+                border: 1px solid #333;
+            }
+        """)
+        
+        # Apply shadow effect
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(12)
+        shadow.setColor(QColor(0, 0, 0, 76))  # rgba(0, 0, 0, 0.3)
+        shadow.setOffset(0, 4)
+        self.setGraphicsEffect(shadow)
+    
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        # Apply hover styling
+        self.setStyleSheet("""
+            IntegratedVideoWidget {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #1a1a1a, stop:1 #0f0f0f);
+                border-radius: 8px;
+                border: 1px solid #1DB954;
+            }
+        """)
+        
+        # Enhanced shadow on hover
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor(0, 0, 0, 102))  # rgba(0, 0, 0, 0.4)
+        shadow.setOffset(0, 6)
+        self.setGraphicsEffect(shadow)
+        
+        # Scale animation
+        self._hover_animation.stop()
+        self._hover_animation.setStartValue(self._hover_scale)
+        self._hover_animation.setEndValue(1.02)
+        self._hover_animation.start()
+    
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        # Restore base styling
+        self._apply_base_style()
+        
+        # Scale back
+        self._hover_animation.stop()
+        self._hover_animation.setStartValue(self._hover_scale)
+        self._hover_animation.setEndValue(1.0)
+        self._hover_animation.start()
+    
+    def getHoverScale(self):
+        return self._hover_scale
+    
+    def setHoverScale(self, value):
+        self._hover_scale = value
+        self.update()
+    
+    hoverScale = Property(float, getHoverScale, setHoverScale)
+    
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Apply scaling transform
+        if self._hover_scale != 1.0:
+            rect = self.rect()
+            center = rect.center()
+            painter.translate(center)
+            painter.scale(self._hover_scale, self._hover_scale)
+            painter.translate(-center)
+        
+        super().paintEvent(event)
+
+
 # --- Playlist tree with drag-and-drop reorder ---
 class ClickableLabel(QLabel):
     clicked = Signal()
@@ -1245,6 +1457,12 @@ class MediaPlayer(QMainWindow):
 
         # Add the container to the sidebar
         side_layout.addWidget(self.playlist_container, 1)
+        
+        # Add integrated video preview widget (Option B) - positioned absolutely in corner
+        self.integrated_video = IntegratedVideoWidget(self.playlist_container)
+        # Position it in the bottom-right corner with some margin
+        # We'll position it after the widget is shown using a timer
+        QTimer.singleShot(100, self._position_integrated_video)
 
         # Main area: video frame + controls
         main_col = QVBoxLayout(); content.addLayout(main_col, 1)
@@ -1313,7 +1531,7 @@ class MediaPlayer(QMainWindow):
         # Control bar
 
         # Shuffle
-        self.shuffle_btn = QPushButton()
+        self.shuffle_btn = AnimatedButton()
         self.shuffle_btn.setCheckable(True)
         self.shuffle_btn.setObjectName('controlBtn'); self.shuffle_btn.setToolTip("Shuffle")
         try:
@@ -1326,20 +1544,20 @@ class MediaPlayer(QMainWindow):
             self.shuffle_btn.setText("🔀")
         self.shuffle_btn.clicked.connect(self._toggle_shuffle); 
         # Prev / Play-Pause / Next
-        prev_btn = QPushButton()
+        prev_btn = AnimatedButton()
         prev_btn.setIcon(self.prev_icon)
         prev_btn.setIconSize(icon_size)
         prev_btn.setObjectName('controlBtn')
         prev_btn.clicked.connect(self.previous_track)
      
 
-        self.play_pause_btn = QPushButton()
+        self.play_pause_btn = AnimatedButton()
         # initial icon will be set after we prepare tinted variants below
         self.play_pause_btn.setIconSize(QSize(30, 30))
         self.play_pause_btn.setObjectName('playPauseBtn')
         self.play_pause_btn.clicked.connect(self.toggle_play_pause)
         
-        next_btn = QPushButton()
+        next_btn = AnimatedButton()
         next_btn.setIcon(self.next_icon)
         next_btn.setIconSize(icon_size)
         next_btn.setObjectName('controlBtn')
@@ -1404,7 +1622,7 @@ class MediaPlayer(QMainWindow):
         except Exception:
             pass
         # Repeat
-        self.repeat_btn = QPushButton(); self.repeat_btn.setCheckable(True)
+        self.repeat_btn = AnimatedButton(); self.repeat_btn.setCheckable(True)
         self.repeat_btn.setObjectName('controlBtn'); self.repeat_btn.setToolTip("Repeat current")
         try:
             if hasattr(self, 'repeat_icon') and not self.repeat_icon.isNull():
@@ -1721,10 +1939,16 @@ class MediaPlayer(QMainWindow):
                 self.track_label.setText(self._track_title_full)
 
     def resizeEvent(self, event):
-        """Handle window resize to update elided text"""
+        """Handle window resize to update elided text and reposition integrated video"""
         super().resizeEvent(event)
         try:
             self._update_track_label_elide()
+        except Exception:
+            pass
+        
+        # Reposition integrated video widget on resize
+        try:
+            self._position_integrated_video()
         except Exception:
             pass
 
@@ -1756,6 +1980,24 @@ class MediaPlayer(QMainWindow):
             x = available.x() + (available.width() - window_size.width()) // 2
             y = available.y() + (available.height() - window_size.height()) // 2
             self.move(x, y)    
+
+    def _position_integrated_video(self):
+        """Position the integrated video widget in the bottom-right corner of the playlist container."""
+        try:
+            if hasattr(self, 'integrated_video') and hasattr(self, 'playlist_container'):
+                container_rect = self.playlist_container.rect()
+                video_size = self.integrated_video.size()
+                
+                # Position with 16px margin from bottom and right edges (matching mockup)
+                x = container_rect.width() - video_size.width() - 16
+                y = container_rect.height() - video_size.height() - 16
+                
+                self.integrated_video.move(x, y)
+                self.integrated_video.show()
+                # Ensure it stays on top of other playlist widgets
+                self.integrated_video.raise_()
+        except Exception as e:
+            logger.debug(f"Failed to position integrated video: {e}")
 
     def _apply_dynamic_fonts(self):
         """Apply dynamic font scaling based on application font size.
@@ -2067,10 +2309,10 @@ class MediaPlayer(QMainWindow):
         #playlistTree::item:selected { background-color: #282828; color: #1DB954; }
         #videoWidget { background-color: #000000; border-radius: 8px; border: 1px solid #202020; }
         #trackLabel { color: #FFFFFF; font-weight: bold; font-family: '{self._serif_font}'; font-style: italic; }
-        #controlBtn { background: transparent; color: #B3B3B3; font-size: 20px; border: none; border-radius: 20px; width: 40px; height: 40px; padding: 0px; }
-        #controlBtn:hover { background-color: #282828; }
+        #controlBtn { background: transparent; color: #B3B3B3; font-size: 20px; border: none; border-radius: 50%; width: 40px; height: 40px; padding: 0px; transition: all 0.15s cubic-bezier(0.2, 0, 0.38, 0.9); }
+        #controlBtn:hover { background-color: #282828; color: #FFFFFF; }
         #controlBtn:pressed { background-color: #202020; padding-top: 1px; padding-left: 1px; }
-        #playPauseBtn { background-color: #FFFFFF; color: #000000; font-size: 20px; border: none; border-radius: 25px; width: 50px; height: 50px; padding: 0px; }
+        #playPauseBtn { background-color: #FFFFFF; color: #000000; font-size: 20px; border: none; border-radius: 50%; width: 50px; height: 50px; padding: 0px; transition: all 0.15s cubic-bezier(0.2, 0, 0.38, 0.9); }
         #playPauseBtn:hover { background-color: #f0f0f0; }
         #playPauseBtn:pressed { background-color: #e0e0e0; padding-top: 1px; padding-left: 1px; }
         #volumeSlider::groove:horizontal { height: 4px; background-color: #535353; border-radius: 2px; }
@@ -2193,12 +2435,12 @@ class MediaPlayer(QMainWindow):
         #playlistTree::item:selected { background-color: #e76f51; color: #f3ead3; }
         #videoWidget { background-color: #000; border-radius: 8px; border: 10px solid #faf3e0; }
         #trackLabel { color: #4a2c2a; font-weight: bold; font-style: italic; font-family: '{self._serif_font}'; }
-        #playPauseBtn { background-color: #e76f51; color: #f3ead3; font-size: 26px; border: none; border-radius: 30px; width: 60px; height: 60px; padding: 0px; }
+        #playPauseBtn { background-color: #e76f51; color: #f3ead3; font-size: 26px; border: none; border-radius: 50%; width: 60px; height: 60px; padding: 0px; transition: all 0.15s cubic-bezier(0.2, 0, 0.38, 0.9); }
         #playPauseBtn:hover {
         background-color: #d86a4a;
     }
         #playPauseBtn:pressed { background-color: #d1603f; padding-top: 1px; padding-left: 1px; }
-        #controlBtn { background: transparent; color: #654321; font-size: 20px; border: none; border-radius: 20px; width: 40px; height: 40px; padding: 0px; }
+        #controlBtn { background: transparent; color: #654321; font-size: 20px; border: none; border-radius: 50%; width: 40px; height: 40px; padding: 0px; transition: all 0.15s cubic-bezier(0.2, 0, 0.38, 0.9); }
         #controlBtn:hover { background-color: rgba(0,0,0,0.04); color: #4a2c2a; }
         #controlBtn:pressed { background-color: rgba(0,0,0,0.08); padding-top: 1px; padding-left: 1px; }
         QSlider::groove:horizontal { height: 6px; background-color: #c2a882; border-radius: 3px; }
