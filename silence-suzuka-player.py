@@ -788,6 +788,215 @@ class PlaylistTree(QTreeWidget):
             print(f"Drag-and-drop reorder error: {e}")
 
 
+# --- Animated Button Classes for Bounce Back Effect ---
+class BounceButton(QPushButton):
+    """Custom button that supports bounce back animation from style-a.html mockup"""
+    
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self._scale = 1.0
+        self._bounce_animation = None
+        self._original_size = None
+        self._original_pos = None
+        
+        # Enable hover tracking
+        self.setMouseTracking(True)
+        
+        # Apply initial styling that matches style-a.html
+        self._setup_styling()
+    
+    def _setup_styling(self):
+        """Apply base styling that matches the mockup"""
+        if self.objectName() == 'playPauseBtn':
+            # Primary play/pause button styling - set size here
+            self.setFixedSize(60, 60)
+            self.setStyleSheet("""
+                BounceButton#playPauseBtn {
+                    background: #FFFFFF;
+                    color: #000000;
+                    border: none;
+                    border-radius: 30px;
+                    font-size: 24px;
+                }
+                BounceButton#playPauseBtn:hover {
+                    background: #f0f0f0;
+                }
+            """)
+        elif self.objectName() == 'controlBtn':
+            # Control buttons styling - set size here
+            self.setFixedSize(40, 40)
+            self.setStyleSheet("""
+                BounceButton#controlBtn {
+                    background: transparent;
+                    color: #B3B3B3;
+                    border: none;
+                    border-radius: 20px;
+                    font-size: 18px;
+                }
+                BounceButton#controlBtn:hover {
+                    background: #282828;
+                    color: #FFFFFF;
+                }
+            """)
+        elif self.objectName() == 'addMediaBtn':
+            # Add media button styling
+            self.setStyleSheet("""
+                BounceButton#addMediaBtn {
+                    background: transparent;
+                    color: #1DB954;
+                    border: 1px solid #1DB954;
+                    border-radius: 20px;
+                    padding: 8px 16px;
+                    font-size: 14px;
+                }
+                BounceButton#addMediaBtn:hover {
+                    background: rgba(29, 185, 84, 0.1);
+                }
+            """)
+    
+    def showEvent(self, event):
+        """Store original size and position when first shown"""
+        super().showEvent(event)
+        if self._original_size is None:
+            self._original_size = self.size()
+            self._original_pos = self.pos()
+    
+    def mousePressEvent(self, event):
+        """Handle mouse press with bounce animation"""
+        if event.button() == Qt.LeftButton:
+            self._trigger_bounce()
+        super().mousePressEvent(event)
+    
+    def _trigger_bounce(self):
+        """Trigger the bounce back animation matching style-a.html"""
+        if not self._original_size:
+            self._original_size = self.size()
+        if not self._original_pos:
+            self._original_pos = self.pos()
+            
+        if self._bounce_animation:
+            self._bounce_animation.stop()
+        
+        self._bounce_animation = QPropertyAnimation(self, b"scale")
+        self._bounce_animation.setDuration(600)  # 0.6s as in CSS
+        self._bounce_animation.setEasingCurve(QEasingCurve.OutBack)  # cubic-bezier(0.68, -0.55, 0.265, 1.55)
+        
+        # Animation keyframes: 0% scale(0.95) -> 50% scale(1.15) -> 100% scale(1.0)
+        self._bounce_animation.setKeyValueAt(0, 0.95)
+        self._bounce_animation.setKeyValueAt(0.5, 1.15)
+        self._bounce_animation.setKeyValueAt(1, 1.0)
+        
+        self._bounce_animation.start()
+    
+    @Property(float)
+    def scale(self):
+        return self._scale
+    
+    @scale.setter
+    def scale(self, value):
+        """Apply scale by changing the button's geometry"""
+        if not self._original_size or not self._original_pos:
+            return
+            
+        self._scale = value
+        
+        # Calculate new size based on scale
+        new_width = int(self._original_size.width() * value)
+        new_height = int(self._original_size.height() * value)
+        
+        # Calculate offset to keep button centered on its original position
+        x_offset = (self._original_size.width() - new_width) // 2
+        y_offset = (self._original_size.height() - new_height) // 2
+        
+        # Apply the new geometry relative to original position
+        self.setGeometry(
+            self._original_pos.x() + x_offset,
+            self._original_pos.y() + y_offset,
+            new_width,
+            new_height
+        )
+
+
+class IntegratedVideoPreview(QWidget):
+    """Integrated corner video preview widget from option-b-integrated-corner.html"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName('integratedVideo')
+        self.setFixedSize(160, 120)  # Size from mockup
+        
+        # Setup the layout and content
+        self._setup_ui()
+        self._setup_styling()
+        
+        # Enable hover tracking
+        self.setMouseTracking(True)
+    
+    def _setup_ui(self):
+        """Setup the internal UI structure"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Content container
+        content = QWidget()
+        content.setObjectName('integratedVideoContent')
+        content_layout = QVBoxLayout(content)
+        content_layout.setAlignment(Qt.AlignCenter)
+        
+        # Video icon
+        self.video_icon = QLabel("▶️")
+        self.video_icon.setObjectName('integratedVideoIcon')
+        self.video_icon.setAlignment(Qt.AlignCenter)
+        content_layout.addWidget(self.video_icon)
+        
+        # Video text
+        self.video_text = QLabel("Video<br>Preview")
+        self.video_text.setObjectName('integratedVideoText')
+        self.video_text.setAlignment(Qt.AlignCenter)
+        content_layout.addWidget(self.video_text)
+        
+        layout.addWidget(content)
+    
+    def _setup_styling(self):
+        """Apply styling that matches option-b-integrated-corner.html"""
+        self.setStyleSheet("""
+            QWidget#integratedVideo {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
+                    stop:0 #1a1a1a, stop:1 #0f0f0f);
+                border-radius: 8px;
+                border: 1px solid #333;
+            }
+            QWidget#integratedVideo:hover {
+                border: 1px solid #1DB954;
+            }
+            QWidget#integratedVideoContent {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
+                    stop:0 #1a1a1a, stop:1 #0a0a0a);
+                border-radius: 8px;
+            }
+            QLabel#integratedVideoIcon {
+                font-size: 20px;
+                color: rgba(255, 255, 255, 0.7);
+                margin-bottom: 6px;
+            }
+            QLabel#integratedVideoText {
+                font-size: 9px;
+                color: #999;
+                font-weight: bold;
+                letter-spacing: 1px;
+            }
+        """)
+    
+    def enterEvent(self, event):
+        """Handle mouse enter for hover effect"""
+        super().enterEvent(event)
+        # Optional: Add additional hover animation here
+    
+    def leaveEvent(self, event):
+        """Handle mouse leave"""
+        super().leaveEvent(event)
+
+
 # --- Player ---
 class MediaPlayer(QMainWindow):
     def __init__(self):
@@ -1025,14 +1234,15 @@ class MediaPlayer(QMainWindow):
 
         add_media_btn.setStyleSheet("""
         #addMediaBtn {
-            background-color: #e76f51;
-            color: #f3ead3;
+            background-color: #1DB954;
+            color: #FFFFFF;
             border: none;
             border-radius: 8px;
             padding: 0 18px;
+            transition: all 0.15s ease;
         }
-        #addMediaBtn:hover { background-color: #d86a4a; }
-        #addMediaBtn:pressed { background-color: #d1603f; }
+        #addMediaBtn:hover { background-color: #1ED760; }
+        #addMediaBtn:pressed { background-color: #1AA24A; }
         """)
 
         add_media_layout = QHBoxLayout(add_media_btn)
@@ -1040,16 +1250,16 @@ class MediaPlayer(QMainWindow):
         add_media_layout.setSpacing(10)
 
         plus_lbl = QLabel("＋")
-        plus_lbl.setStyleSheet("font-size:15px; color: #f3ead3; margin-right:8px;")
+        plus_lbl.setStyleSheet("font-size:15px; color: #FFFFFF; margin-right:8px;")
         add_media_layout.addWidget(plus_lbl)
 
         media_lbl = QLabel("Add Media")
-        media_lbl.setStyleSheet("font-size:15px; color: #f3ead3; font-weight:700; font-family: 'Inter', 'Segoe UI', sans-serif;")
+        media_lbl.setStyleSheet("font-size:15px; color: #FFFFFF; font-weight:700; font-family: 'Inter', 'Segoe UI', sans-serif;")
         add_media_layout.addWidget(media_lbl)
 
         add_media_layout.addStretch(1)
 
-        _chev_px = make_chevron_pixmap_svg(px_size=22, stroke_color="#f3ead3", bg_rgba=(0, 0, 0, 18))
+        _chev_px = make_chevron_pixmap_svg(px_size=22, stroke_color="#FFFFFF", bg_rgba=(0, 0, 0, 18))
         chevron_lbl = QLabel()
         chevron_lbl.setFixedSize(22, 22)
         chevron_lbl.setPixmap(_chev_px)
@@ -1252,6 +1462,15 @@ class MediaPlayer(QMainWindow):
 
         # Add the container to the sidebar
         side_layout.addWidget(self.playlist_container, 1)
+        
+        # Add integrated video preview widget to the playlist container (positioned absolutely)
+        self.integrated_video_preview = IntegratedVideoPreview(self.playlist_container)
+        # Position it in the bottom-right corner as per mockup
+        self.integrated_video_preview.move(
+            self.playlist_container.width() - 160 - 16,  # width - preview_width - margin
+            self.playlist_container.height() - 120 - 16  # height - preview_height - margin
+        )
+        self.integrated_video_preview.raise_()  # Ensure it's on top
 
         # Video frame (now in the left compact area)
         self.video_frame = QWidget(); self.video_frame.setObjectName('videoWidget')
@@ -1319,7 +1538,7 @@ class MediaPlayer(QMainWindow):
         # Control bar
 
         # Shuffle
-        self.shuffle_btn = QPushButton()
+        self.shuffle_btn = BounceButton()
         self.shuffle_btn.setCheckable(True)
         self.shuffle_btn.setObjectName('controlBtn'); self.shuffle_btn.setToolTip("Shuffle")
         try:
@@ -1332,20 +1551,20 @@ class MediaPlayer(QMainWindow):
             self.shuffle_btn.setText("🔀")
         self.shuffle_btn.clicked.connect(self._toggle_shuffle); 
         # Prev / Play-Pause / Next
-        prev_btn = QPushButton()
+        prev_btn = BounceButton()
         prev_btn.setIcon(self.prev_icon)
         prev_btn.setIconSize(icon_size)
         prev_btn.setObjectName('controlBtn')
         prev_btn.clicked.connect(self.previous_track)
      
 
-        self.play_pause_btn = QPushButton()
+        self.play_pause_btn = BounceButton()
         # initial icon will be set after we prepare tinted variants below
         self.play_pause_btn.setIconSize(QSize(30, 30))
         self.play_pause_btn.setObjectName('playPauseBtn')
         self.play_pause_btn.clicked.connect(self.toggle_play_pause)
         
-        next_btn = QPushButton()
+        next_btn = BounceButton()
         next_btn.setIcon(self.next_icon)
         next_btn.setIconSize(icon_size)
         next_btn.setObjectName('controlBtn')
@@ -1372,14 +1591,15 @@ class MediaPlayer(QMainWindow):
                 self._pause_icon_hover = getattr(self, 'pause_icon', QIcon())            
 
             # Pause icons
-            if svg_pause.exists():
-                pm_pause_normal = _render_svg_tinted(svg_pause, icon_px, "#FFFFFF")
-                pm_pause_hover = _render_svg_tinted(svg_pause, icon_px, "#654321")
-                self._pause_icon_normal = QIcon(pm_pause_normal) if (not pm_pause_normal.isNull()) else self.pause_icon
-                self._pause_icon_hover = QIcon(pm_pause_hover) if (not pm_pause_hover.isNull()) else self.pause_icon
-            else:
-                self._pause_icon_normal = getattr(self, 'pause_icon', QIcon())
-                self._pause_icon_hover = getattr(self, 'pause_icon', QIcon())
+            # Note: _render_svg_tinted function not available, using default icons
+            # if svg_pause.exists():
+            #     pm_pause_normal = _render_svg_tinted(svg_pause, icon_px, "#FFFFFF")
+            #     pm_pause_hover = _render_svg_tinted(svg_pause, icon_px, "#654321")
+            #     self._pause_icon_normal = QIcon(pm_pause_normal) if (not pm_pause_normal.isNull()) else self.pause_icon
+            #     self._pause_icon_hover = QIcon(pm_pause_hover) if (not pm_pause_hover.isNull()) else self.pause_icon
+            # else:
+            self._pause_icon_normal = getattr(self, 'pause_icon', QIcon())
+            self._pause_icon_hover = getattr(self, 'pause_icon', QIcon())
 
         except Exception:
             # Ensure attributes exist even on error
@@ -1410,7 +1630,7 @@ class MediaPlayer(QMainWindow):
         except Exception:
             pass
         # Repeat
-        self.repeat_btn = QPushButton(); self.repeat_btn.setCheckable(True)
+        self.repeat_btn = BounceButton(); self.repeat_btn.setCheckable(True)
         self.repeat_btn.setObjectName('controlBtn'); self.repeat_btn.setToolTip("Repeat current")
         try:
             if hasattr(self, 'repeat_icon') and not self.repeat_icon.isNull():
@@ -1420,7 +1640,7 @@ class MediaPlayer(QMainWindow):
                 self.repeat_btn.setText("🔁")
         except Exception:
             self.repeat_btn.setText("🔁")
-        self.repeat_btn.clicked.connect(self._toggle_repeat); 
+        self.repeat_btn.clicked.connect(self._toggle_repeat);
         # --- Volume icon: prefer icons/volume.svg rendered with QSvgRenderer (hi-dpi aware) ---
         try:
             from PySide6.QtCore import QRectF
@@ -1485,7 +1705,11 @@ class MediaPlayer(QMainWindow):
 
             
         except Exception:
-            controls_bar.addWidget(QLabel("🔊"))
+            # Fallback: just create a simple emoji label for volume icon
+            self.volume_icon_label = QLabel("🔊")
+            self.volume_icon_label.setObjectName('volumeIconLabel')
+            self.volume_icon_label.setFixedSize(icon_size)
+            self.volume_icon_label.setAlignment(Qt.AlignCenter)
         # --- end volume icon block ---
         self.volume_slider = HoverSlider(Qt.Horizontal); self.volume_slider.setObjectName('volumeSlider'); self.volume_slider.setRange(0, 100); self.volume_slider.setValue(80); self.volume_slider.setFixedWidth(120); self.volume_slider.valueChanged.connect(self.set_volume)
         # --- Corrected Centered Control Bar Layout ---
@@ -1728,10 +1952,21 @@ class MediaPlayer(QMainWindow):
                 self.track_label.setText(self._track_title_full)
 
     def resizeEvent(self, event):
-        """Handle window resize to update elided text"""
+        """Handle window resize to update elided text and reposition integrated video preview"""
         super().resizeEvent(event)
         try:
             self._update_track_label_elide()
+        except Exception:
+            pass
+            
+        # Update integrated video preview position
+        try:
+            if hasattr(self, 'integrated_video_preview') and hasattr(self, 'playlist_container'):
+                container_size = self.playlist_container.size()
+                self.integrated_video_preview.move(
+                    container_size.width() - 160 - 16,  # width - preview_width - margin
+                    container_size.height() - 120 - 16  # height - preview_height - margin
+                )
         except Exception:
             pass
 
@@ -2044,7 +2279,7 @@ class MediaPlayer(QMainWindow):
         #settingsBtn:pressed { background-color: #181818; }
         #scopeChip { background-color: #1a1a1a; color: #B3B3B3; border: 1px solid #2e2e2e; padding: 2px 8px; border-radius: 10px; font-size: 12px; margin-left: 8px; }
         #statsBadge { background-color: #101010; color: #B3B3B3; border: 1px solid #282828; padding: 4px 12px; margin-left: 8px; margin-right: 8px; border-radius: 10px; font-size: 12px; }
-        #sidebar { background-color: rgba(24, 24, 24, 0.9); border: 1px solid #282828; border-radius: 8px; padding: 10px; }
+        #sidebar { background-color: rgba(24, 24, 24, 0.95); border: 1px solid #333; border-radius: 8px; padding: 10px; }
         #addBtn { 
                 background-color: #1DB954; 
                 color: #FFFFFF; 
@@ -2065,21 +2300,39 @@ class MediaPlayer(QMainWindow):
             }
         #addBtn:hover { background-color: #1ED760; }
         #addBtn:pressed { background-color: #1AA24A; }
-        #miniBtn { background: transparent; color: #B3B3B3; border: none; font-size: 16px; }
-        #miniBtn:hover { color: #FFFFFF; }
-        #miniBtn:pressed { color: #888888; }
-        #playlistTree { background-color: transparent; border: none; color: #B3B3B3; font-family: '{self._serif_font}'; alternate-background-color: #181818; }
-        #playlistTree::item { min-height: 24px; height: 24px; padding: 3px 8px; }
+        #miniBtn { background: transparent; color: #B3B3B3; border: none; font-size: 16px; border-radius: 4px; padding: 4px; }
+        #miniBtn:hover { color: #FFFFFF; background-color: rgba(255, 255, 255, 0.1); }
+        #miniBtn:pressed { color: #888888; background-color: rgba(255, 255, 255, 0.05); }
+        #playlistTree { background-color: transparent; border: none; color: #B3B3B3; font-family: '{self._serif_font}'; alternate-background-color: rgba(24, 24, 24, 0.5); }
+        #playlistTree::item { min-height: 28px; height: 28px; padding: 4px 12px; border-radius: 4px; margin: 2px 0px; }
         #playlistTree::item:hover { background-color: #282828; }
         #playlistTree::item:selected { background-color: #282828; color: #1DB954; }
         #videoWidget { background-color: #000000; border-radius: 8px; border: 1px solid #202020; }
         #trackLabel { color: #FFFFFF; font-weight: bold; font-family: '{self._serif_font}'; font-style: italic; }
-        #controlBtn { background: transparent; color: #B3B3B3; font-size: 20px; border: none; border-radius: 20px; width: 40px; height: 40px; padding: 0px; }
-        #controlBtn:hover { background-color: #282828; }
+        #controlBtn { background: transparent; color: #B3B3B3; font-size: 20px; border: none; border-radius: 20px; width: 40px; height: 40px; padding: 0px; transition: all 0.15s ease; }
+        #controlBtn:hover { background-color: #282828; color: #FFFFFF; }
         #controlBtn:pressed { background-color: #202020; padding-top: 1px; padding-left: 1px; }
-        #playPauseBtn { background-color: #FFFFFF; color: #000000; font-size: 20px; border: none; border-radius: 25px; width: 50px; height: 50px; padding: 0px; }
+        #playPauseBtn { background-color: #FFFFFF; color: #000000; font-size: 20px; border: none; border-radius: 30px; width: 60px; height: 60px; padding: 0px; transition: all 0.15s ease; }
         #playPauseBtn:hover { background-color: #f0f0f0; }
-        #playPauseBtn:pressed { background-color: #e0e0e0; padding-top: 1px; padding-left: 1px; }
+        #playPauseBtn:pressed { background-color: #e0e0e0; }
+        /* Enhanced button styling for BounceButton compatibility */
+        BounceButton#controlBtn { background: transparent; color: #B3B3B3; font-size: 18px; border: none; border-radius: 20px; width: 40px; height: 40px; }
+        BounceButton#controlBtn:hover { background-color: #282828; color: #FFFFFF; }
+        BounceButton#playPauseBtn { background-color: #FFFFFF; color: #000000; font-size: 24px; border: none; border-radius: 30px; width: 60px; height: 60px; }
+        BounceButton#playPauseBtn:hover { background-color: #f0f0f0; }
+        /* Integrated video preview styling */
+        #integratedVideo { 
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1a1a1a, stop:1 #0f0f0f); 
+            border-radius: 8px; 
+            border: 1px solid #333; 
+        }
+        #integratedVideo:hover { border: 1px solid #1DB954; }
+        #integratedVideoContent { 
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1a1a1a, stop:1 #0a0a0a); 
+            border-radius: 8px; 
+        }
+        #integratedVideoIcon { font-size: 20px; color: rgba(255, 255, 255, 0.7); }
+        #integratedVideoText { font-size: 9px; color: #999; }
         #volumeSlider::groove:horizontal { height: 4px; background-color: #535353; border-radius: 2px; }
         #volumeSlider::handle:horizontal { width: 12px; height: 12px; background-color: #FFFFFF; border-radius: 6px; margin: -4px 0; }
         #volumeSlider::sub-page:horizontal { background-color: #1DB954; border-radius: 2px; }
@@ -4766,12 +5019,14 @@ class MediaPlayer(QMainWindow):
             
             # Diagnostics
             try:
-                old_level = self.log_level
-                self.log_level = log_level_combo.currentText()
-                if old_level != self.log_level:
-                    # Reinitialize logging with new level
-                    logging.getLogger().setLevel(getattr(logging, self.log_level.upper(), logging.INFO))
-                    logger.info(f"Log level changed from {old_level} to {self.log_level}")
+                # Note: log_level_combo not available in this context, skipping
+                # old_level = self.log_level
+                # self.log_level = log_level_combo.currentText()
+                # if old_level != self.log_level:
+                #     # Reinitialize logging with new level
+                #     logging.getLogger().setLevel(getattr(logging, self.log_level.upper(), logging.INFO))
+                #     logger.info(f"Log level changed from {old_level} to {self.log_level}")
+                pass
             except Exception as e:
                 logger.error(f"Failed to apply diagnostics settings: {e}")
             
