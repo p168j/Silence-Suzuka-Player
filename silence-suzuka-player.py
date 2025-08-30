@@ -797,6 +797,7 @@ class BounceButton(QPushButton):
         self._scale = 1.0
         self._bounce_animation = None
         self._original_size = None
+        self._original_pos = None
         
         # Enable hover tracking
         self.setMouseTracking(True)
@@ -807,7 +808,8 @@ class BounceButton(QPushButton):
     def _setup_styling(self):
         """Apply base styling that matches the mockup"""
         if self.objectName() == 'playPauseBtn':
-            # Primary play/pause button styling
+            # Primary play/pause button styling - set size here
+            self.setFixedSize(60, 60)
             self.setStyleSheet("""
                 BounceButton#playPauseBtn {
                     background: #FFFFFF;
@@ -821,7 +823,8 @@ class BounceButton(QPushButton):
                 }
             """)
         elif self.objectName() == 'controlBtn':
-            # Control buttons styling
+            # Control buttons styling - set size here
+            self.setFixedSize(40, 40)
             self.setStyleSheet("""
                 BounceButton#controlBtn {
                     background: transparent;
@@ -852,10 +855,11 @@ class BounceButton(QPushButton):
             """)
     
     def showEvent(self, event):
-        """Store original size when first shown"""
+        """Store original size and position when first shown"""
         super().showEvent(event)
         if self._original_size is None:
             self._original_size = self.size()
+            self._original_pos = self.pos()
     
     def mousePressEvent(self, event):
         """Handle mouse press with bounce animation"""
@@ -867,6 +871,8 @@ class BounceButton(QPushButton):
         """Trigger the bounce back animation matching style-a.html"""
         if not self._original_size:
             self._original_size = self.size()
+        if not self._original_pos:
+            self._original_pos = self.pos()
             
         if self._bounce_animation:
             self._bounce_animation.stop()
@@ -889,7 +895,7 @@ class BounceButton(QPushButton):
     @scale.setter
     def scale(self, value):
         """Apply scale by changing the button's geometry"""
-        if not self._original_size:
+        if not self._original_size or not self._original_pos:
             return
             
         self._scale = value
@@ -898,15 +904,14 @@ class BounceButton(QPushButton):
         new_width = int(self._original_size.width() * value)
         new_height = int(self._original_size.height() * value)
         
-        # Calculate offset to keep button centered
+        # Calculate offset to keep button centered on its original position
         x_offset = (self._original_size.width() - new_width) // 2
         y_offset = (self._original_size.height() - new_height) // 2
         
-        # Apply the new geometry
-        current_pos = self.pos()
+        # Apply the new geometry relative to original position
         self.setGeometry(
-            current_pos.x() + x_offset,
-            current_pos.y() + y_offset,
+            self._original_pos.x() + x_offset,
+            self._original_pos.y() + y_offset,
             new_width,
             new_height
         )
@@ -977,10 +982,19 @@ class IntegratedVideoPreview(QWidget):
             QLabel#integratedVideoText {
                 font-size: 9px;
                 color: #999;
-                text-transform: uppercase;
+                font-weight: bold;
                 letter-spacing: 1px;
             }
         """)
+    
+    def enterEvent(self, event):
+        """Handle mouse enter for hover effect"""
+        super().enterEvent(event)
+        # Optional: Add additional hover animation here
+    
+    def leaveEvent(self, event):
+        """Handle mouse leave"""
+        super().leaveEvent(event)
 
 
 # --- Player ---
@@ -1220,14 +1234,15 @@ class MediaPlayer(QMainWindow):
 
         add_media_btn.setStyleSheet("""
         #addMediaBtn {
-            background-color: #e76f51;
-            color: #f3ead3;
+            background-color: #1DB954;
+            color: #FFFFFF;
             border: none;
             border-radius: 8px;
             padding: 0 18px;
+            transition: all 0.15s ease;
         }
-        #addMediaBtn:hover { background-color: #d86a4a; }
-        #addMediaBtn:pressed { background-color: #d1603f; }
+        #addMediaBtn:hover { background-color: #1ED760; }
+        #addMediaBtn:pressed { background-color: #1AA24A; }
         """)
 
         add_media_layout = QHBoxLayout(add_media_btn)
@@ -1235,16 +1250,16 @@ class MediaPlayer(QMainWindow):
         add_media_layout.setSpacing(10)
 
         plus_lbl = QLabel("＋")
-        plus_lbl.setStyleSheet("font-size:15px; color: #f3ead3; margin-right:8px;")
+        plus_lbl.setStyleSheet("font-size:15px; color: #FFFFFF; margin-right:8px;")
         add_media_layout.addWidget(plus_lbl)
 
         media_lbl = QLabel("Add Media")
-        media_lbl.setStyleSheet("font-size:15px; color: #f3ead3; font-weight:700; font-family: 'Inter', 'Segoe UI', sans-serif;")
+        media_lbl.setStyleSheet("font-size:15px; color: #FFFFFF; font-weight:700; font-family: 'Inter', 'Segoe UI', sans-serif;")
         add_media_layout.addWidget(media_lbl)
 
         add_media_layout.addStretch(1)
 
-        _chev_px = make_chevron_pixmap_svg(px_size=22, stroke_color="#f3ead3", bg_rgba=(0, 0, 0, 18))
+        _chev_px = make_chevron_pixmap_svg(px_size=22, stroke_color="#FFFFFF", bg_rgba=(0, 0, 0, 18))
         chevron_lbl = QLabel()
         chevron_lbl.setFixedSize(22, 22)
         chevron_lbl.setPixmap(_chev_px)
@@ -2264,7 +2279,7 @@ class MediaPlayer(QMainWindow):
         #settingsBtn:pressed { background-color: #181818; }
         #scopeChip { background-color: #1a1a1a; color: #B3B3B3; border: 1px solid #2e2e2e; padding: 2px 8px; border-radius: 10px; font-size: 12px; margin-left: 8px; }
         #statsBadge { background-color: #101010; color: #B3B3B3; border: 1px solid #282828; padding: 4px 12px; margin-left: 8px; margin-right: 8px; border-radius: 10px; font-size: 12px; }
-        #sidebar { background-color: rgba(24, 24, 24, 0.9); border: 1px solid #282828; border-radius: 8px; padding: 10px; }
+        #sidebar { background-color: rgba(24, 24, 24, 0.95); border: 1px solid #333; border-radius: 8px; padding: 10px; }
         #addBtn { 
                 background-color: #1DB954; 
                 color: #FFFFFF; 
@@ -2285,21 +2300,39 @@ class MediaPlayer(QMainWindow):
             }
         #addBtn:hover { background-color: #1ED760; }
         #addBtn:pressed { background-color: #1AA24A; }
-        #miniBtn { background: transparent; color: #B3B3B3; border: none; font-size: 16px; }
-        #miniBtn:hover { color: #FFFFFF; }
-        #miniBtn:pressed { color: #888888; }
-        #playlistTree { background-color: transparent; border: none; color: #B3B3B3; font-family: '{self._serif_font}'; alternate-background-color: #181818; }
-        #playlistTree::item { min-height: 24px; height: 24px; padding: 3px 8px; }
+        #miniBtn { background: transparent; color: #B3B3B3; border: none; font-size: 16px; border-radius: 4px; padding: 4px; }
+        #miniBtn:hover { color: #FFFFFF; background-color: rgba(255, 255, 255, 0.1); }
+        #miniBtn:pressed { color: #888888; background-color: rgba(255, 255, 255, 0.05); }
+        #playlistTree { background-color: transparent; border: none; color: #B3B3B3; font-family: '{self._serif_font}'; alternate-background-color: rgba(24, 24, 24, 0.5); }
+        #playlistTree::item { min-height: 28px; height: 28px; padding: 4px 12px; border-radius: 4px; margin: 2px 0px; }
         #playlistTree::item:hover { background-color: #282828; }
         #playlistTree::item:selected { background-color: #282828; color: #1DB954; }
         #videoWidget { background-color: #000000; border-radius: 8px; border: 1px solid #202020; }
         #trackLabel { color: #FFFFFF; font-weight: bold; font-family: '{self._serif_font}'; font-style: italic; }
-        #controlBtn { background: transparent; color: #B3B3B3; font-size: 20px; border: none; border-radius: 20px; width: 40px; height: 40px; padding: 0px; }
-        #controlBtn:hover { background-color: #282828; }
+        #controlBtn { background: transparent; color: #B3B3B3; font-size: 20px; border: none; border-radius: 20px; width: 40px; height: 40px; padding: 0px; transition: all 0.15s ease; }
+        #controlBtn:hover { background-color: #282828; color: #FFFFFF; }
         #controlBtn:pressed { background-color: #202020; padding-top: 1px; padding-left: 1px; }
-        #playPauseBtn { background-color: #FFFFFF; color: #000000; font-size: 20px; border: none; border-radius: 25px; width: 50px; height: 50px; padding: 0px; }
+        #playPauseBtn { background-color: #FFFFFF; color: #000000; font-size: 20px; border: none; border-radius: 30px; width: 60px; height: 60px; padding: 0px; transition: all 0.15s ease; }
         #playPauseBtn:hover { background-color: #f0f0f0; }
-        #playPauseBtn:pressed { background-color: #e0e0e0; padding-top: 1px; padding-left: 1px; }
+        #playPauseBtn:pressed { background-color: #e0e0e0; }
+        /* Enhanced button styling for BounceButton compatibility */
+        BounceButton#controlBtn { background: transparent; color: #B3B3B3; font-size: 18px; border: none; border-radius: 20px; width: 40px; height: 40px; }
+        BounceButton#controlBtn:hover { background-color: #282828; color: #FFFFFF; }
+        BounceButton#playPauseBtn { background-color: #FFFFFF; color: #000000; font-size: 24px; border: none; border-radius: 30px; width: 60px; height: 60px; }
+        BounceButton#playPauseBtn:hover { background-color: #f0f0f0; }
+        /* Integrated video preview styling */
+        #integratedVideo { 
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1a1a1a, stop:1 #0f0f0f); 
+            border-radius: 8px; 
+            border: 1px solid #333; 
+        }
+        #integratedVideo:hover { border: 1px solid #1DB954; }
+        #integratedVideoContent { 
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1a1a1a, stop:1 #0a0a0a); 
+            border-radius: 8px; 
+        }
+        #integratedVideoIcon { font-size: 20px; color: rgba(255, 255, 255, 0.7); }
+        #integratedVideoText { font-size: 9px; color: #999; }
         #volumeSlider::groove:horizontal { height: 4px; background-color: #535353; border-radius: 2px; }
         #volumeSlider::handle:horizontal { width: 12px; height: 12px; background-color: #FFFFFF; border-radius: 6px; margin: -4px 0; }
         #volumeSlider::sub-page:horizontal { background-color: #1DB954; border-radius: 2px; }
