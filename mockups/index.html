@@ -3,320 +3,89 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Button Feedback Mockups - Silence Suzuka Player</title>
+    <title>Silence Suzuka Player - UI Mockups</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
         body {
-            background: #191414;
-            color: #FFFFFF;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%);
+            color: #fff;
             padding: 40px 20px;
-            line-height: 1.6;
+            margin: 0;
         }
-
         .container {
-            max-width: 800px;
+            max-width: 1200px;
             margin: 0 auto;
+            text-align: center;
         }
-
         h1 {
-            text-align: center;
-            margin-bottom: 20px;
-            color: #1DB954;
-            font-size: 2.5rem;
-        }
-
-        .subtitle {
-            text-align: center;
+            font-size: 48px;
             margin-bottom: 40px;
-            color: #B3B3B3;
-            font-size: 1.2rem;
+            background: linear-gradient(90deg, #1DB954 0%, #1ed760 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
-
-        .problem-statement {
-            background: #282828;
+        .section {
+            margin: 60px 0;
             padding: 30px;
-            border-radius: 12px;
-            margin-bottom: 40px;
-            border-left: 4px solid #1DB954;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
-
-        .problem-statement h2 {
-            color: #1DB954;
-            margin-bottom: 15px;
-        }
-
-        .mockup-grid {
+        .options-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 30px;
-            margin-bottom: 40px;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
         }
-
-        .mockup-card {
-            background: #282828;
-            border-radius: 12px;
-            padding: 30px;
-            transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
-            border: 2px solid transparent;
-            text-decoration: none;
-            color: inherit;
+        .option-link {
             display: block;
-        }
-
-        .mockup-card:hover {
-            transform: translateY(-5px);
-            border-color: #1DB954;
-            box-shadow: 0 10px 40px rgba(29, 185, 84, 0.2);
-        }
-
-        .mockup-card h3 {
-            color: #1DB954;
-            margin-bottom: 15px;
-            font-size: 1.4rem;
-        }
-
-        .mockup-card .description {
-            color: #B3B3B3;
-            margin-bottom: 20px;
-        }
-
-        .mockup-card .features {
-            list-style: none;
-            margin-bottom: 20px;
-        }
-
-        .mockup-card .features li {
-            color: #FFFFFF;
-            margin-bottom: 8px;
-            padding-left: 20px;
-            position: relative;
-        }
-
-        .mockup-card .features li::before {
-            content: '▶';
-            position: absolute;
-            left: 0;
-            color: #1DB954;
-            font-size: 0.8rem;
-        }
-
-        .timing-info {
-            background: #1a1a1a;
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-family: 'Courier New', monospace;
-            font-size: 0.9rem;
-            color: #B3B3B3;
-        }
-
-        .timing-info .duration {
-            color: #1DB954;
-            font-weight: bold;
-        }
-
-        .cta {
-            text-align: center;
-            margin-top: 40px;
-            padding: 30px;
-            background: #1a1a1a;
+            padding: 20px;
+            background: linear-gradient(135deg, #1e1e1e 0%, #0a0a0a 100%);
             border-radius: 12px;
-        }
-
-        .cta h2 {
-            color: #1DB954;
-            margin-bottom: 15px;
-        }
-
-        .comparison-table {
-            background: #282828;
-            border-radius: 12px;
-            padding: 30px;
-            margin-top: 40px;
-        }
-
-        .comparison-table h2 {
-            color: #1DB954;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th, td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #404040;
-        }
-
-        th {
-            color: #1DB954;
-            font-weight: 600;
-        }
-
-        td {
-            color: #B3B3B3;
-        }
-
-        .rating {
-            color: #1DB954;
-            font-weight: bold;
-        }
-
-        .preview-btn {
-            display: inline-block;
-            background: #1DB954;
-            color: #FFFFFF;
-            padding: 8px 16px;
-            border-radius: 20px;
             text-decoration: none;
-            font-size: 0.9rem;
-            font-weight: 500;
-            margin-top: 10px;
-            transition: all 0.2s;
+            color: #fff;
+            border: 1px solid rgba(29, 185, 84, 0.3);
+            transition: all 0.3s ease;
         }
-
-        .preview-btn:hover {
-            background: #1ED760;
-            transform: scale(1.05);
+        .option-link:hover {
+            transform: translateY(-4px);
+            border-color: #1DB954;
+            box-shadow: 0 8px 25px rgba(29, 185, 84, 0.2);
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Button Feedback Mockups</h1>
-        <p class="subtitle">Interactive demonstrations to fix the "dead" feeling of current music controls</p>
-
-        <div class="problem-statement">
-            <h2>Current Issue</h2>
-            <p>The play button and other controls feel "dead" when clicked. While there's already hover tint and slight shrink on press, it lacks the satisfying tactile feel of modern music players like Spotify/Apple Music.</p>
-            <p><strong>Goal:</strong> Make buttons feel as responsive and satisfying as premium music apps!</p>
+        <h1>🎵 Silence Suzuka Player - UI Mockups</h1>
+        
+        <div class="section">
+            <h2>🖼️ Video Area Styling Options</h2>
+            <p>Choose how to improve the video player area</p>
+            <div class="options-grid">
+                <a href="option-a-floating-video.html" class="option-link">
+                    <h3>Option A: Floating Video</h3>
+                    <p>Spotify-style floating player</p>
+                </a>
+                <a href="option-b-integrated-corner.html" class="option-link">
+                    <h3>Option B: Integrated Corner</h3>
+                    <p>Blends with playlist (recommended)</p>
+                </a>
+                <a href="option-c-modern-card.html" class="option-link">
+                    <h3>Option C: Modern Card</h3>
+                    <p>Professional card container</p>
+                </a>
+            </div>
         </div>
-
-        <div class="mockup-grid">
-            <a href="style-a.html" class="mockup-card">
-                <h3>Style A: Bounce Back Effect</h3>
-                <p class="description">Current shrink on press followed by a satisfying bounce back with smooth easing.</p>
-                <ul class="features">
-                    <li>Elastic overshoot animation</li>
-                    <li>Satisfying "pop" feeling</li>
-                    <li>Simple and reliable</li>
-                    <li>Works with existing design</li>
-                </ul>
-                <div class="timing-info">
-                    Duration: <span class="duration">0.4-0.6s</span> • Easing: cubic-bezier(0.68, -0.55, 0.265, 1.55)
-                </div>
-                <span class="preview-btn">Try Interactive Demo →</span>
-            </a>
-
-            <a href="style-b.html" class="mockup-card">
-                <h3>Style B: Ripple Effect</h3>
-                <p class="description">Material Design circular ripple that expands from the exact click point.</p>
-                <ul class="features">
-                    <li>Precise click feedback</li>
-                    <li>Modern, tactile feel</li>
-                    <li>Works well with dark themes</li>
-                    <li>Visual confirmation</li>
-                </ul>
-                <div class="timing-info">
-                    Duration: <span class="duration">0.6s</span> • Easing: linear • Scale: 0 → 4x
-                </div>
-                <span class="preview-btn">Try Interactive Demo →</span>
-            </a>
-
-            <a href="style-c.html" class="mockup-card">
-                <h3>Style C: Color Pulse + Scale</h3>
-                <p class="description">Brief bright color flash combined with scale animation and smooth icon transitions.</p>
-                <ul class="features">
-                    <li>Professional, premium feel</li>
-                    <li>Color-based feedback</li>
-                    <li>Glowing ring effects</li>
-                    <li>State-aware animations</li>
-                </ul>
-                <div class="timing-info">
-                    Duration: <span class="duration">0.5s</span> • Easing: cubic-bezier(0.4, 0.0, 0.2, 1)
-                </div>
-                <span class="preview-btn">Try Interactive Demo →</span>
-            </a>
-
-            <a href="style-d.html" class="mockup-card">
-                <h3>Style D: Kinetic + Audio-like</h3>
-                <p class="description">Multi-stage animation with musical/rhythmic feel and energetic feedback.</p>
-                <ul class="features">
-                    <li>Musical, rhythmic animations</li>
-                    <li>Rotation + glow effects</li>
-                    <li>Multi-stage sequences</li>
-                    <li>Extra satisfying for music</li>
-                </ul>
-                <div class="timing-info">
-                    Duration: <span class="duration">0.8s</span> • Easing: cubic-bezier(0.68, -0.55, 0.265, 1.55)
-                </div>
-                <span class="preview-btn">Try Interactive Demo →</span>
-            </a>
-        </div>
-
-        <div class="comparison-table">
-            <h2>Quick Comparison</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Style</th>
-                        <th>Complexity</th>
-                        <th>Performance</th>
-                        <th>Modern Feel</th>
-                        <th>Music App Feel</th>
-                        <th>Implementation</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><strong>A: Bounce Back</strong></td>
-                        <td class="rating">★★☆☆☆</td>
-                        <td class="rating">★★★★★</td>
-                        <td class="rating">★★★☆☆</td>
-                        <td class="rating">★★★★☆</td>
-                        <td class="rating">★★★★★</td>
-                    </tr>
-                    <tr>
-                        <td><strong>B: Ripple Effect</strong></td>
-                        <td class="rating">★★★☆☆</td>
-                        <td class="rating">★★★★☆</td>
-                        <td class="rating">★★★★★</td>
-                        <td class="rating">★★★☆☆</td>
-                        <td class="rating">★★★☆☆</td>
-                    </tr>
-                    <tr>
-                        <td><strong>C: Color Pulse</strong></td>
-                        <td class="rating">★★★★☆</td>
-                        <td class="rating">★★★★☆</td>
-                        <td class="rating">★★★★★</td>
-                        <td class="rating">★★★★★</td>
-                        <td class="rating">★★★☆☆</td>
-                    </tr>
-                    <tr>
-                        <td><strong>D: Kinetic</strong></td>
-                        <td class="rating">★★★★★</td>
-                        <td class="rating">★★★☆☆</td>
-                        <td class="rating">★★★★☆</td>
-                        <td class="rating">★★★★★</td>
-                        <td class="rating">★★☆☆☆</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="cta">
-            <h2>Testing Instructions</h2>
-            <p>Click each demo link above to test the interactive button feedback. Try rapid clicking, hover effects, and different button types to get a feel for how each style responds. Each demo includes timing information that can be translated to the PySide6 QPropertyAnimation system used in the main application.</p>
-            <p><strong>Focus on:</strong> Which style feels most satisfying when rapidly clicking the play/pause button?</p>
+        
+        <div class="section">
+            <h2>🎮 Button Feedback Styles</h2>
+            <p>Make controls feel more responsive and satisfying</p>
+            <div class="options-grid">
+                <a href="button-feedback-styles.html" class="option-link">
+                    <h3>Interactive Button Demos</h3>
+                    <p>Test 4 different button animation styles</p>
+                </a>
+            </div>
         </div>
     </div>
 </body>
